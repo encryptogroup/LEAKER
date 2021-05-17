@@ -1,0 +1,47 @@
+#Tests
+pytest>=5.3.4
+
+#GLMP18 Attack
+networkx>=2.4
+
+#GJW Attack
+more-itertools>=8.4
+
+#KKNO Attack
+sympy>=1.6
+
+#GLMP19 Attack
+pybind11>=2.5.0
+
+#ARR Attack
+mpmath>=1.1.0
+numba>=0.49.1
+
+# Statistics gathering
+powerlaw>=1.4.6
+scipy>=1.5.2
+
+# Storing preprocessed data set instances
+dill>=0.3.1.1
+
+# Preprocessing and Indexing
+Whoosh>=2.7.4
+nltk>=3.4.5
+mail-parser>=3.12.0
+urlextract>=0.14.0
+tika>=1.24
+python-pptx>=0.6.18
+
+# Plotting
+numpy>=1.18.1
+matplotlib>=3.1.3
+tikzplotlib>=0.9.1
+
+# Linting and Typing
+flake8>=3.7.9
+mypy>=0.761
+typing>=3.7.4.1
+setuptools~=51.1.0
+
+# Parsing SQL queries
+sqlparse

@@ -1,0 +1,17 @@
+/data/
+*.log
+*.png
+.DS_Store
+**/__pycache__/
+/leaker/pq-trees/pybind11/
+/leaker/pq-trees/fuzztest.cc
+/leaker/pq-trees/pqnode.cc
+/leaker/pq-trees/pqnode.h
+/leaker/pq-trees/pqtest.cc
+/leaker/pq-trees/pqtree.cc
+/leaker/pq-trees/pqtree.h
+/leaker/pq-trees/SConstruct
+/leaker/pq-trees/set_methods.h
+/leaker/pq-trees/build/
+/leaker/pq-trees/pq-trees/
+
