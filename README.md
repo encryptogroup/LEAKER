@@ -20,6 +20,9 @@ and set the `PYTHON_DIST_PACKAGES_DIRECTORY` variable in `api/constants.py` appr
     `chmod +x leaker/pq-trees/compile_pq-trees.sh`
 * For speed ups to ARR and APA using [numba](http://numba.pydata.org/), you need to ensure its
 [dependencies](https://numba.pydata.org/numba-doc/latest/user/installing.html#dependency-list) are met on your system.
+* For relational attacks, you need to install `mysql-server` and add a new user. Store its user name and password in `api/constants.py`. Give it rights on the LEAKER database with:
+    
+    ``GRANT ALL PRIVILEGES ON `leaker\_%` .  * TO 'LEAKER_USER'@'localhost';``
 
 To install LEAKER on your system, run:
 

@@ -24,6 +24,12 @@ COMPILE_TIMEOUT: int = 1200  # in seconds
 
 PYTHON_DIST_PACKAGES_DIRECTORY = "/usr/lib/python3/dist-packages/"
 
+MYSQL_IDENTIFIER = "leaker"  # used to identify MySQL databases used for leaker
+
+MYSQL_USER_NAME = "LEAKER_USER"
+
+MYSQL_USER_PASSWORD = ""   # TODO: Use environment variables
+
 
 class AbortException(Exception):
     pass

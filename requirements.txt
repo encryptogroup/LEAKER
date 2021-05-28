@@ -45,3 +45,7 @@ setuptools~=51.1.0
 
 # Parsing SQL queries
 sqlparse
+
+# SQL interfacing
+mysql-connector-python>=8.0.25
+pandas>=1.2.4
