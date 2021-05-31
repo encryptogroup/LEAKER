@@ -15,9 +15,13 @@ from ..api.constants import MYSQL_USER_NAME, MYSQL_USER_PASSWORD
 log = getLogger(__name__)
 
 
+"""MySQL Error Codes"""
+SQL_DATABASE_ALREADY_EXISTS = 1007
+
+
 class SQLConnection:
     """
-    Class that opens and maintains a connection to a MySQL backend.
+    Class that opens and maintains a connection to a MySQL server.
 
     Parameters
         ----------
@@ -41,15 +45,17 @@ class SQLConnection:
         self.__user_password = user_password
         self.__user_name = user_name
 
-    def execute_query(self, query: str) -> None:
+    def execute_query(self, query: str) -> int:
         if not self.is_open():
             raise ConnectionError(f"MySQL Database connection to {self.__host_name} is not open!")
         cursor = self.__connection.cursor()
         try:
             cursor.execute(query)
             self.__connection.commit()
+            return 0
         except Error as err:
-            log.warning(f"Error when performing query {query}: '{err}'")
+            log.debug(f"Error when performing query {query}: '{err.errno}'")
+            return err.errno
 
     def is_open(self) -> bool:
         return self.__connection is not None
