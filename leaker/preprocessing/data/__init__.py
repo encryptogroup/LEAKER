@@ -4,6 +4,8 @@ from .keyword_file import DirectoryEnumerator, RelativePrefixFilter, FileParser,
 from .range_file import FileToRangeInputDocument, RangeCsvParser, NYCInsuranceParser, HMDALoanParser,\
     QueryLogRangeCsvParser, SDSSParser, FileToRangeQueryLogInputDocument
 
+from .relational_file import RelationalCsvParser, FileToRelationalInputDocument
+
 __all__ = [
     'DirectoryEnumerator', 'RelativePrefixFilter', 'FileParser', 'PlainFileParser', 'EMailParser', 'FileLoader',
     'StripPrefix', 'FileToDocument', 'FileToQueryInputDocument', 'StructuredFileParser', 'CsvParser', 'AOLParser',
@@ -12,4 +14,6 @@ __all__ = [
 
     'FileToRangeInputDocument', 'RangeCsvParser', 'NYCInsuranceParser', 'HMDALoanParser', 'QueryLogRangeCsvParser',
     'SDSSParser',  # range_file.py
+
+    'RelationalCsvParser', 'FileToRelationalInputDocument',  # relational_file.py
 ]
