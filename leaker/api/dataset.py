@@ -227,7 +227,7 @@ class Data(ABC):
     def __len__(self) -> int:
         return len(list(self.documents()))
 
-    def __enter__(self) -> 'Dataset':
+    def __enter__(self) -> 'Data':
         return self.open()
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:

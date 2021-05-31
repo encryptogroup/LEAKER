@@ -5,7 +5,7 @@ Authors: Amos Treiber
 
 """
 from logging import getLogger
-from typing import Union
+from typing import Union, Tuple, List
 
 import mysql.connector
 from mysql.connector import Error, MySQLConnection
@@ -45,17 +45,20 @@ class SQLConnection:
         self.__user_password = user_password
         self.__user_name = user_name
 
-    def execute_query(self, query: str) -> int:
+    def execute_query(self, query: str) -> Tuple[int, Union[None, List]]:
         if not self.is_open():
             raise ConnectionError(f"MySQL Database connection to {self.__host_name} is not open!")
-        cursor = self.__connection.cursor()
-        try:
-            cursor.execute(query)
-            self.__connection.commit()
-            return 0
-        except Error as err:
-            log.debug(f"Error when performing query {query}: '{err.errno}'")
-            return err.errno
+        res = None
+        with self.__connection.cursor(buffered=True) as cursor:
+            try:
+                row_count = cursor.execute(query)
+                if row_count is not None:
+                    res = [r for r in cursor.fetchall()]  # we need to consume all results before we can move on.
+                ret = 0
+            except Error as err:
+                log.debug(f"Error when performing query {query}: '{err.errno}'")
+                ret = err.errno
+        return ret, res
 
     def is_open(self) -> bool:
         return self.__connection is not None
@@ -65,7 +68,8 @@ class SQLConnection:
             self.__connection = mysql.connector.connect(
                 host=self.__host_name,
                 user=self.__user_name,
-                passwd=self.__user_password
+                passwd=self.__user_password,
+                buffered=True
             )
             log.info(f"MySQL Database connection to {self.__host_name} successful.")
         except Error as err:

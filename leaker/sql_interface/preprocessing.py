@@ -32,7 +32,7 @@ class SQLRelationalDatabaseWriter(Sink[List[Tuple[str, List[str]]]]):
         log.debug(f"Creating relational index {self.__backend_name}.")
         with SQLConnection() as sql_connection:
             """Create new MySQL Database for name"""
-            if sql_connection.execute_query(f"CREATE DATABASE {self.__name}") == SQL_DATABASE_ALREADY_EXISTS:
+            if sql_connection.execute_query(f"CREATE DATABASE {self.__name}")[0] == SQL_DATABASE_ALREADY_EXISTS:
                 log.warning(f"Overwriting existing DB {self.__name}!")
                 sql_connection.execute_query(f"DROP DATABASE {self.__name}")
                 sql_connection.execute_query(f"CREATE DATABASE {self.__name}")
