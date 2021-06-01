@@ -50,7 +50,8 @@ class SQLConnection:
         cursor.rowcount displays rows_affected for non-DQL (SELECT) queries, but we do not need them.
         :param query:
         :param select:
-        :return:
+        :return: (ret, res): ret is the return value of the query (0 indicating success), and res is a list of the
+                             results (or None if no results are returned or expected)
         """
         if not self.is_open():
             raise ConnectionError(f"MySQL Database connection to {self.__host_name} is not open!")

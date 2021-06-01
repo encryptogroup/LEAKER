@@ -9,7 +9,7 @@ from .range_database import RangeDatabase, RandomRangeDatabase, RegularRangeData
     BaseRangeDatabase, PermutedBetaRandomRangeDatabase, BTRangeDatabase, ABTRangeDatabase, RangeQueryLog
 from .range import Range
 from .sink import DataSink
-from .relational_database import RelationalDatabase
+from .relational_database import RelationalDatabase, RelationalQuery
 
 __all__ = [
     'Attack', 'AttackDefinition', 'KeywordAttack', 'RangeAttack',  # attack.py
@@ -33,5 +33,5 @@ __all__ = [
 
     'DataSink',  # sink.py
 
-    'RelationalDatabase',  # relational_database.py
+    'RelationalDatabase', 'RelationalQuery',  # relational_database.py
 ]

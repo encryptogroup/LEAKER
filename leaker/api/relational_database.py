@@ -4,17 +4,16 @@ For License information see the LICENSE file.
 Authors: Amos Treiber
 
 """
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections import namedtuple
 from logging import getLogger
-from typing import Union, Tuple, Iterator, Optional, Set
+from typing import Union, Tuple, Iterator, Optional, Set, List
 
 from ..api import Dataset, Selectivity
 
 log = getLogger(__name__)
 
-
-RelationalQuery = namedtuple("RelationalQuery", ["table", "attr", "value"])
+RelationalQuery = namedtuple("RelationalQuery", ["id", "table", "attr", "value"])
 
 
 class RelationalDatabase(Dataset):
@@ -36,12 +35,14 @@ class RelationalDatabase(Dataset):
         Parameters
         ----------
         query : RelationalQuery
-            table : Union[str, int]
-                the name or identifier of the table to search on.
-            attr : Union[str, int]
-                the attribute name or its identifier (within the table).
-            val : Union[str, int]
-                the value or its identifier.
+            id : int
+                if available, the id of the query in the backend (None otherwise)
+            table : int
+                the identifier of the table to search on.
+            attr : int
+                the attribute identifier (within the table).
+            val : str
+                the value.
 
         Returns
         -------
@@ -51,16 +52,29 @@ class RelationalDatabase(Dataset):
         raise NotImplementedError
 
     @abstractmethod
-    def queries(self, table: Optional[Union[str, int]], attr: Optional[Union[str, int]], sel: Optional[Selectivity]) \
-            -> Set[RelationalQuery]:
-        """Yields all possible queries in this data instance (possibly restricted to a table and attribute or a
-        selectivity. If attr is set, table needs to be set as well."""
+    def queries(self, max_queries: Optional[int], table: Optional[int], attr: Optional[int],
+                sel: Optional[Selectivity]) -> List[RelationalQuery]:
+        """Yields all possible queries in this data instance (possibly restricted to max_queries queries, a table and
+        attribute or a selectivity. If attr is set, table needs to be set as well."""
         raise NotImplementedError
+
+    def keywords(self):
+        return self.queries()
 
     @abstractmethod
     def row_ids(self) -> Set[Tuple[int, int]]:
         """Returns the unique identifiers (table_id, row_id) of all entries in this DB."""
         raise NotImplementedError
+
+    def doc_ids(self):
+        return self.row_ids()
+
+    def documents(self):  # TODO: Refactor base class
+        return self.row_ids()
+
+    def pickle(self) -> None:
+        """No pickling needed, everything happens in MySQL"""
+        pass
 
     @abstractmethod
     def sample(self, rate: float, tables: Optional[Iterator[Union[str, int]]]) -> 'RelationalDatabase':
@@ -82,21 +96,6 @@ class RelationalDatabase(Dataset):
     @abstractmethod
     def sample_rate(self) -> float:
         """The rate at which this data set was sampled, relative to the full data set"""
-        raise NotImplementedError
-
-    @abstractmethod
-    def is_open(self) -> bool:
-        """Returns true if this data instance was opened before"""
-        raise NotImplementedError
-
-    @abstractmethod
-    def open(self) -> 'RelationalDatabase':
-        """Opens the data instance, i. e. may allocate resources, if applicable"""
-        raise NotImplementedError
-
-    @abstractmethod
-    def close(self) -> None:
-        """Closes this data instance, i. e. may free resources, if applicable"""
         raise NotImplementedError
 
     def __call__(self, query: RelationalQuery) -> Iterator[int]:
