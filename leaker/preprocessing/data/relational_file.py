@@ -19,10 +19,12 @@ class RelationalCsvParser(CsvParser):
     A parser for the CSV files that contain relational data. Can take a list of columns that shall not be included.
     """
 
-    _excluded_columns: Union[None, Set[str]]
+    _excluded_columns: Set[str]
 
     def __init__(self, excluded_columns: List[str] = None, delimiter: str = '\t'):
-        self._excluded_columns = set(s.lower() for s in excluded_columns)
+        self._excluded_columns = set()
+        if excluded_columns is not None:
+            self._excluded_columns = set(s.lower() for s in excluded_columns)
         super(RelationalCsvParser, self).__init__(delimiter=delimiter)
 
     def parse(self, f: TextIO) -> Iterator[Tuple[str, str, str]]:
