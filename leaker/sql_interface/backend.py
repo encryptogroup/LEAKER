@@ -22,13 +22,16 @@ class SQLBackend(Backend):
             return ret == 0
 
     def load(self, name: str) -> SQLRelationalDatabase:
+        internal_name = f"{MYSQL_IDENTIFIER}_{name}"
         return None
 
     def data_sets(self) -> Set[str]:
         with SQLConnection() as conn:
-            ret, dbs = conn.execute_query(f"SHOW DATABASES")
-            if ret == 0:
-                return set(dbs)
+            ret, res = conn.execute_query(f"SHOW DATABASES", select=True)
+            if ret == 0 and res is not None:
+                """Have to remove {MYSQL_IDENTIFIER}_"""
+                return set(backend_name[len(MYSQL_IDENTIFIER) + 1:] for backend_name in
+                           set(r[0] for r in res).difference({'information_schema'}))
             else:
                 return set()
 
