@@ -50,7 +50,7 @@ class SQLRelationalDatabaseWriter(Sink[List[Tuple[str, List[str]]]]):
                                          "table_id INT(8) UNSIGNED, "
                                          "FOREIGN KEY (table_id) REFERENCES tables(table_id), "
                                          "attr_id INT(8) UNSIGNED, "
-                                         "val VARCHAR(16), "
+                                         "val VARCHAR(32), "
                                          "selectivity INT(10) UNSIGNED)")
 
             # Table to store queries and their responses (one entry per response)
@@ -88,7 +88,7 @@ class SQLRelationalDatabaseWriter(Sink[List[Tuple[str, List[str]]]]):
                     current_table_id += 1
                     sql_connection.execute_query(f"INSERT INTO tables VALUES ({current_table_id}, '{table_name}')")
 
-                    attributes = ", ".join([f"attr_{i} VARCHAR(16)" for i in range(len(values))])
+                    attributes = ", ".join([f"attr_{i} VARCHAR(32)" for i in range(len(values))])
                     sql_connection.execute_query(f"CREATE TABLE {table_name} ("
                     "table_id INT(8), "
                     "row_id INT(8) UNSIGNED PRIMARY KEY, "
@@ -96,16 +96,17 @@ class SQLRelationalDatabaseWriter(Sink[List[Tuple[str, List[str]]]]):
 
                     prev_table_name = table_name
 
-                for i, val in enumerate(values):  # Add queries
-                    if (i, val) not in current_table_queries.keys():
-                        current_table_queries[(i, val)] = [current_row_id]
-                    else:
-                        current_table_queries[(i, val)].append(current_row_id)
-
                 # Add values
                 val_str = f"{current_table_id}, {current_row_id}, " + ", ".join([f"'{v}'" for v in values])
-                sql_connection.execute_query(f"INSERT INTO {table_name} VALUES ({val_str})")
-                current_row_id += 1
+                if sql_connection.execute_query(f"INSERT INTO {table_name} VALUES ({val_str})")[0] != 0:
+                    log.warning(f"Skipping entry not compatible with MySQL!")
+                else:
+                    for i, val in enumerate(values):  # Add queries
+                        if (i, val) not in current_table_queries.keys():
+                            current_table_queries[(i, val)] = [current_row_id]
+                        else:
+                            current_table_queries[(i, val)].append(current_row_id)
+                    current_row_id += 1
 
             if len(current_table_queries) > 0:
                 log.info(f"Indexing {len(current_table_queries)} queries for {table_name}.")
