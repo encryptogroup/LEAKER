@@ -102,6 +102,8 @@ class SQLRelationalDatabaseWriter(Sink[List[Tuple[str, List[str]]]]):
                     log.warning(f"Skipping entry not compatible with MySQL!")
                 else:
                     for i, val in enumerate(values):  # Add queries
+                        if val == '':  # skip NULL values (we see them as invalid queries)
+                            continue
                         if (i, val) not in current_table_queries.keys():
                             current_table_queries[(i, val)] = [current_row_id]
                         else:
