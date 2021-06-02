@@ -11,6 +11,7 @@ from typing import List
 import pytest
 
 from leaker.api import Selectivity, QueryInputDocument, RelationalQuery
+from leaker.extension import IdentityExtension, SelectivityExtension, CoOccurrenceExtension
 from leaker.pattern import ResponseIdentity, ResponseLength, CoOccurrence
 from leaker.preprocessing import Preprocessor, Filter, Sink
 from leaker.preprocessing.data import DirectoryEnumerator, RelativeFile, FileLoader, RelationalCsvParser, \
@@ -65,7 +66,7 @@ def test_backend():
             assert rdb.selectivity(q) == rdb.selectivity(qp)
 
 
-def test_pattern():
+def test_pattern_and_extension():
     backend = SQLBackend()
 
     if not backend.has("random_csv"):
@@ -75,15 +76,20 @@ def test_pattern():
 
     with rdb:
         queries = rdb.queries(max_queries=100, sel=Selectivity.High)
-
         results = [set(rdb.query(q)) for q in queries]
         rlens = [len(r) for r in results]
         cooccs = [[len([i for i in rdb.query(q) if i in rdb.query(qp)]) for q in queries] for qp in queries]
 
-        qid_pattern = ResponseIdentity().leak(rdb, queries)
-        rlen_pattern = ResponseLength().leak(rdb, queries)
-        cocc_pattern = CoOccurrence().leak(rdb, queries)
+        for i in range(2):
+            if i == 1:
+                rdb.extend_with(IdentityExtension)
+                rdb.extend_with(SelectivityExtension)
+                rdb.extend_with(CoOccurrenceExtension)
 
-        assert qid_pattern == results
-        assert rlen_pattern == rlens
-        assert cocc_pattern == cooccs
+            qid_pattern = ResponseIdentity().leak(rdb, queries)
+            rlen_pattern = ResponseLength().leak(rdb, queries)
+            cocc_pattern = CoOccurrence().leak(rdb, queries)
+
+            assert qid_pattern == results
+            assert rlen_pattern == rlens
+            assert cocc_pattern == cooccs

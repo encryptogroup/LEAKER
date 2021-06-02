@@ -14,6 +14,7 @@ from ..api import Dataset, Selectivity
 log = getLogger(__name__)
 
 RelationalQuery = namedtuple("RelationalQuery", ["id", "table", "attr", "value"])
+RelationalKeyword = RelationalQuery  # We see a "keyword" as a relational query
 
 
 class RelationalDatabase(Dataset):

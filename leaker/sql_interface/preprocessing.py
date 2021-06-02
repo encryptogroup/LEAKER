@@ -72,6 +72,7 @@ class SQLRelationalDatabaseWriter(Sink[List[Tuple[str, List[str]]]]):
                     if len(current_table_queries) > 0:
                         log.info(f"Indexing {len(current_table_queries)} queries for {prev_table_name}.")
                     for query, responses in current_table_queries.items():  # flush current_table_queries
+                        """TODO: Add possibility to restrict to most/least freq queries/keyword"""
                         sql_connection.execute_query(f"INSERT INTO queries VALUES "
                                                      f"({current_query_id}, {current_table_id}, {query[0]}, "
                                                      f"'{query[1]}', {len(responses)})")
