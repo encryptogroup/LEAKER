@@ -47,7 +47,7 @@ class SQLConnection:
     def execute_query(self, query: str, select: bool = False) -> Tuple[int, Union[None, List]]:
         """
         Executes a certain query. If results are expected, select has to be set to True. This is necessary because
-        cursor.rowcount displays rows_affected for non-DQL (SELECT) queries, but we do not need them.
+        cursor.rowcount displays rows_affected for non-DQL (non-SELECT) queries, but we do not need them.
         :param query:
         :param select:
         :return: (ret, res): ret is the return value of the query (0 indicating success), and res is a list of the

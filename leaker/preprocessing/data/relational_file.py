@@ -30,7 +30,8 @@ class RelationalCsvParser(CsvParser):
     def parse(self, f: TextIO) -> Iterator[Tuple[str, str, str]]:
         csv_reader = csv.reader(f, delimiter=self._delimiter)
         line = next(csv_reader, None)  # first line
-        excluded_column_ids = set([i for i, value in enumerate(line) if value.strip() in self._excluded_columns])
+        excluded_column_ids = set([i for i, value in enumerate(line) if value.lower().strip() in
+                                   self._excluded_columns])
 
         for line in csv_reader:
             content = []
