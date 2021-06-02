@@ -48,7 +48,7 @@ class SQLRelationalDatabase(RelationalDatabase):
         self._sql_connection = SQLConnection()
         log.info(f"Loading {name} completed.")
 
-    def query(self, query: RelationalQuery) -> Iterator[int]:
+    def query(self, query: RelationalQuery) -> Iterator[Tuple[int, int]]:
         """
         Yields all matches for an attr=val query on a table.
 
@@ -66,14 +66,15 @@ class SQLRelationalDatabase(RelationalDatabase):
 
         Returns
         -------
-        query : Iterator[int]
-            an iterator yielding all matches (row ids) for the query
+        query : Iterator[Tuple[int, int]]
+            an iterator yielding all matches (table_id,row id) for the query
         """
         if query.id is not None:
-            ret, res = self._sql_connection.execute_query(f"SELECT row_id FROM queries_responses "
+            ret, res = self._sql_connection.execute_query(f"SELECT table_id, row_id FROM queries_responses "
                                                           f"WHERE query_id = {query.id}", select=True)
         else:
-            ret, res = self._sql_connection.execute_query(f"SELECT row_id FROM queries, queries_responses  "
+            ret, res = self._sql_connection.execute_query(f"SELECT queries.table_id, row_id FROM "
+                                                          f"queries, queries_responses  "
                                                           f"WHERE queries_responses.query_id = queries.query_id AND "
                                                           f"queries.table_id = {query.table} AND "
                                                           f"queries.attr_id = {query.attr} AND "
@@ -81,7 +82,7 @@ class SQLRelationalDatabase(RelationalDatabase):
 
         if res is not None:
             for r in res:
-                yield r[0]
+                yield r[0], r[1]
 
     def queries(self, max_queries: Optional[int] = None, table: Optional[int] = None, attr: Optional[int] = None,
                 sel: Optional[Selectivity] = None) -> List[RelationalQuery]:

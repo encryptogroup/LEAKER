@@ -28,7 +28,7 @@ class RelationalDatabase(Dataset):
         raise NotImplementedError
 
     @abstractmethod
-    def query(self, query: RelationalQuery) -> Iterator[int]:
+    def query(self, query: RelationalQuery) -> Iterator[Tuple[int, int]]:
         """
         Yields all matches for an attr=val query on a table.
 
@@ -47,7 +47,7 @@ class RelationalDatabase(Dataset):
         Returns
         -------
         query : Iterator[int]
-            an iterator yielding all matches (row ids) for the query
+            an iterator yielding all matches (table_id,row id) for the query
         """
         raise NotImplementedError
 
@@ -98,7 +98,7 @@ class RelationalDatabase(Dataset):
         """The rate at which this data set was sampled, relative to the full data set"""
         raise NotImplementedError
 
-    def __call__(self, query: RelationalQuery) -> Iterator[int]:
+    def __call__(self, query: RelationalQuery) -> Iterator[Tuple[int, int]]:
         yield from self.query(query)
 
     def __len__(self) -> int:
