@@ -137,7 +137,6 @@ class CoOccurrenceExtension(SelectivityExtension):
         co_occurrence : int
             the cooccurrence count of key0 with key1
         """
-        print(f"using cooccext")
         if self.__is_sampled:
             if (key0, key1) in self.__sampled_coocc_cache:
                 return self.__sampled_coocc_cache[(key0, key1)]
