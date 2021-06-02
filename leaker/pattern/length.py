@@ -6,16 +6,17 @@ Authors: Johannes Leupold
 """
 from typing import List, Iterable, Union, Tuple
 
-from ..api import Dataset, LeakagePattern, RangeDatabase
+from ..api import Dataset, LeakagePattern, RangeDatabase, RelationalDatabase, RelationalQuery
 from ..extension import SelectivityExtension
 
 
 class ResponseLength(LeakagePattern[int]):
     """
-    The response length (rlen) leakage pattern leaking the number of documents matching any given query.
+    The response length (rlen) leakage pattern leaking the number of entries matching any given query.
     """
 
-    def leak(self, dataset: Union[Dataset, RangeDatabase], queries: Union[Iterable[str], Iterable[Tuple[int, int]]]) \
+    def leak(self, dataset: Union[Dataset, RangeDatabase, RelationalDatabase],
+             queries: Union[Iterable[str], Iterable[Tuple[int, int]], Iterable[RelationalQuery]])\
             -> List[int]:
         if isinstance(dataset, RangeDatabase):
             return [len(dataset.query(q)) for q in queries]
