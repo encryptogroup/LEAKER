@@ -50,3 +50,6 @@ this data source (necessary only once) and load it with LEAKER to perform evalua
 #### Acknowledgements
 
 This framework has been developed by Abdelkarim Kati, Johannes Leupold, Tobias Stöckert, Amos Treiber, and Michael Yonli.
+
+The framework also uses code by Groot Roessink, which is located in the folder ikk_roessink and released under the
+license ikk_roessink/LICENSE.MD
