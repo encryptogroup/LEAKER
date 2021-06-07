@@ -93,3 +93,22 @@ def test_pattern_and_extension():
             assert qid_pattern == results
             assert rlen_pattern == rlens
             assert cocc_pattern == cooccs
+
+
+def test_sampling():
+    backend = SQLBackend()
+
+    if not backend.has("random_csv"):
+        test_indexing()
+
+    rdb = backend.load("random_csv")
+
+    with rdb:
+        with rdb.sample(.2, [0]) as rdb_sample:
+            for q in rdb_sample.queries(max_queries=100, sel=Selectivity.High):
+                assert set(rdb_sample.query(q)).issubset(rdb_sample.row_ids())
+                assert rdb_sample.row_ids().issubset(rdb.row_ids())
+                if q.table == 0:
+                    assert set(rdb_sample.query(q)) == set(rdb.query(q))
+                else:
+                    assert set(rdb_sample.query(q)).issubset(rdb.query(q))
