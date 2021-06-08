@@ -88,7 +88,7 @@ class IdentityExtension(Extension, ABC):
                                                          pickle_filename)
             log.info(f"Loading Cache for '{dataset.name()}' complete")
 
-    def sample(self, dataset: Dataset) -> 'IdentityExtension':
+    def sample(self, dataset: Union[Dataset, RelationalDatabase]) -> 'IdentityExtension':
         return IdentityExtension(dataset, dataset.doc_ids(), dataset.keywords(), self._identity_cache)
 
     def get_identity_cache(self) -> Cache[Keyword, Set[Identifier]]:
@@ -113,14 +113,15 @@ class IdentityExtension(Extension, ABC):
         """
         return self._identity_cache[keyword]
 
-    def pickle(self, dataset: 'Dataset', description: Optional[str] = None) -> None:
+    def pickle(self, dataset: Union[Dataset, RelationalDatabase], description: Optional[str] = None) -> None:
         if not isinstance(dataset, RelationalDatabase):
             filename = self.pickle_filename(self.key(), dataset.name(), description)
             self._identity_cache.pickle(filename)
             log.info("Stored extension pickle in " + filename)
 
     @classmethod
-    def extend_with_pickle(cls, dataset: 'Dataset', description: Optional[str] = None) -> 'IdentityExtension':
+    def extend_with_pickle(cls, dataset: Union[Dataset, RelationalDatabase], description: Optional[str] = None) \
+            -> 'IdentityExtension':
         if isinstance(dataset, RelationalDatabase):
             filename = None
         else:

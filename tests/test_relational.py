@@ -105,10 +105,32 @@ def test_sampling():
 
     with rdb:
         with rdb.sample(.2, [0]) as rdb_sample:
-            for q in rdb_sample.queries(max_queries=100, sel=Selectivity.High):
+            assert rdb_sample.row_ids().issubset(rdb.row_ids())
+            assert len(rdb_sample.row_ids()) < len(rdb.row_ids())
+
+            queries = rdb_sample.queries(max_queries=100, sel=Selectivity.High)
+            for q in queries:
                 assert set(rdb_sample.query(q)).issubset(rdb_sample.row_ids())
-                assert rdb_sample.row_ids().issubset(rdb.row_ids())
                 if q.table == 0:
                     assert set(rdb_sample.query(q)) == set(rdb.query(q))
                 else:
                     assert set(rdb_sample.query(q)).issubset(rdb.query(q))
+
+            results = [set(rdb_sample.query(q)) for q in queries]
+            rlens = [len(r) for r in results]
+            cooccs = [[len([i for i in rdb_sample.query(q) if i in rdb_sample.query(qp)]) for q in queries]
+                      for qp in queries]
+
+            for i in range(2):
+                if i == 1:
+                    rdb_sample.extend_with(IdentityExtension)
+                    rdb_sample.extend_with(SelectivityExtension)
+                    rdb_sample.extend_with(CoOccurrenceExtension)
+
+                qid_pattern = ResponseIdentity().leak(rdb_sample, queries)
+                rlen_pattern = ResponseLength().leak(rdb_sample, queries)
+                cocc_pattern = CoOccurrence().leak(rdb_sample, queries)
+
+                assert qid_pattern == results
+                assert rlen_pattern == rlens
+                assert cocc_pattern == cooccs
