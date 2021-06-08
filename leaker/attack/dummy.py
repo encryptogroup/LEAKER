@@ -8,7 +8,7 @@ from math import ceil
 from random import random
 from typing import Iterable, List, Any, Tuple, Set, Type, TypeVar
 
-from ..extension import IdentityExtension
+from ..extension import IdentityExtension, SelectivityExtension
 from ..api import KeywordAttack, Dataset, LeakagePattern, RangeAttack, RelationalAttack, RelationalQuery, \
     RelationalKeyword, RelationalDatabase, Extension
 
@@ -53,7 +53,7 @@ class DummyRelationalAttack(RelationalAttack):
 
     @classmethod
     def required_extensions(cls) -> Set[Type[E]]:
-        return {IdentityExtension}
+        return {IdentityExtension, SelectivityExtension}
 
     def recover(self, dataset: RelationalDatabase, queries: Iterable[RelationalQuery]) -> List[RelationalKeyword]:
         qlist = list(queries)

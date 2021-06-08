@@ -12,7 +12,7 @@ from typing import Set, Iterator, Optional, Union, Tuple, List, Dict, TypeVar, T
 from ..api import RelationalDatabase, RelationalQuery, Extension
 from ..api.constants import MYSQL_IDENTIFIER, Selectivity
 from . import SQLConnection
-from ..extension import IdentityExtension
+from ..extension import IdentityExtension, SelectivityExtension
 
 
 log = getLogger(__name__)
@@ -226,6 +226,9 @@ class SQLRelationalDatabase(RelationalDatabase):
         return 1
 
     def selectivity(self,  query: RelationalQuery) -> int:
+        if self.has_extension(SelectivityExtension):
+            return self.get_extension(SelectivityExtension).selectivity(query)
+
         if query.id is not None:
             ret, res = self._sql_connection.execute_query(f"SELECT selectivity FROM queries "
                                                           f"WHERE query_id = {query.id}", select=True)
@@ -356,4 +359,7 @@ class SampledSQLRelationalDatabase(SQLRelationalDatabase):
                 yield row_id
 
     def selectivity(self,  query: RelationalQuery) -> int:
-        return sum(1 for _ in self.query(query))
+        if self.has_extension(SelectivityExtension):
+            return self.get_extension(SelectivityExtension).selectivity(query)
+        else:
+            return sum(1 for _ in self.query(query))
