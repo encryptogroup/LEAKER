@@ -273,14 +273,22 @@ class SampledSQLRelationalDatabase(SQLRelationalDatabase):
 
         self._row_ids = set(row_id for row_ids in table_row_ids.values() for row_id in row_ids)
         self._table_row_ids = table_row_ids
-        with self.__parent:
+        self.__rate = rate
+        if not self.__parent.is_open():
+            with self.__parent:
+                if not self.__parent.has_extension(IdentityExtension):
+                    self.__parent.extend_with(IdentityExtension)
+                identity = self.__parent.get_extension(IdentityExtension)
+                self._queries = [q for q in self.__parent.queries()
+                                 if len(set(identity.doc_ids(q)).intersection(self._table_row_ids[q.table])) > 0]
+
+                self._set_extensions(map(lambda ext: ext.sample(self), parent._get_extensions()))
+        else:
             if not self.__parent.has_extension(IdentityExtension):
                 self.__parent.extend_with(IdentityExtension)
             identity = self.__parent.get_extension(IdentityExtension)
             self._queries = [q for q in self.__parent.queries()
                              if len(set(identity.doc_ids(q)).intersection(self._table_row_ids[q.table])) > 0]
-
-            self.__rate = rate
 
             self._set_extensions(map(lambda ext: ext.sample(self), parent._get_extensions()))
 
@@ -354,9 +362,12 @@ class SampledSQLRelationalDatabase(SQLRelationalDatabase):
         query : Iterator[Tuple[int, int]]
             an iterator yielding all matches (table_id,row id) for the query
         """
-        for row_id in self.__parent.query(query):
-            if row_id in self._table_row_ids[query.table]:
-                yield row_id
+        if self.has_extension(IdentityExtension):
+            yield from self.get_extension(IdentityExtension).doc_ids(query)
+        else:
+            for row_id in self.__parent.query(query):
+                if row_id in self._table_row_ids[query.table]:
+                    yield row_id
 
     def selectivity(self,  query: RelationalQuery) -> int:
         if self.has_extension(SelectivityExtension):
