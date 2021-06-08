@@ -88,7 +88,26 @@ class CoOccurrenceExtension(SelectivityExtension):
                 log.info(f"Creating CoOccurrence Cache for '{dataset.name()}'. This might take a while.")
                 self.__is_sampled = False
                 max_elements = 0  # int(len(dataset.keywords()) / 8)
-                with dataset:
+                if not dataset.is_open():
+                    with dataset:
+                        self.__coocc_cache = \
+                            Cache.build(lambda key: set(map(lambda d: self.__doc_id_dict[d],
+                                                            self.doc_ids(key[0]).intersection(self.doc_ids(key[1])))),
+                                        max_elements=max_elements)
+
+                        for key0 in dataset.keywords():
+                            kw_iter = iter(dataset.keywords())
+                            for _ in range(len(dataset.keywords())):
+                                key1 = next(kw_iter)
+                                if (key0, key1) not in self.__coocc_cache.keys() and \
+                                        (key1, key0) not in self.__coocc_cache.keys():
+                                    self.__coocc_cache.compute_if_absent((key0, key1))
+                                if len(self.__coocc_cache) >= max_elements:
+                                    break
+                            else:
+                                continue
+                            break
+                else:
                     self.__coocc_cache = \
                         Cache.build(lambda key: set(map(lambda d: self.__doc_id_dict[d],
                                                         self.doc_ids(key[0]).intersection(self.doc_ids(key[1])))),
