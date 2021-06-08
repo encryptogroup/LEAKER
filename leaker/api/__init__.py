@@ -1,4 +1,4 @@
-from .attack import Attack, AttackDefinition, KeywordAttack, RangeAttack
+from .attack import Attack, AttackDefinition, KeywordAttack, RangeAttack, RelationalAttack
 from .backend import Backend
 from .dataset import Dataset, Extension, KeywordQueryLog, Data
 from .document import Document, InputDocument, QueryInputDocument
@@ -12,7 +12,7 @@ from .sink import DataSink
 from .relational_database import RelationalDatabase, RelationalQuery, RelationalKeyword
 
 __all__ = [
-    'Attack', 'AttackDefinition', 'KeywordAttack', 'RangeAttack',  # attack.py
+    'Attack', 'AttackDefinition', 'KeywordAttack', 'RangeAttack', 'RelationalAttack',  # attack.py
 
     'Backend',  # backend.py
 

@@ -6,9 +6,13 @@ Authors: Johannes Leupold, Amos Treiber
 """
 from math import ceil
 from random import random
-from typing import Iterable, List, Any, Tuple
+from typing import Iterable, List, Any, Tuple, Set, Type, TypeVar
 
-from ..api import KeywordAttack, Dataset, LeakagePattern, RangeAttack
+from ..extension import IdentityExtension
+from ..api import KeywordAttack, Dataset, LeakagePattern, RangeAttack, RelationalAttack, RelationalQuery, \
+    RelationalKeyword, RelationalDatabase, Extension
+
+E = TypeVar("E", bound=Extension, covariant=True)
 
 
 class DummyAttack(KeywordAttack):
@@ -35,6 +39,27 @@ class DummyAttack(KeywordAttack):
         correct = ceil(len(qlist) * with_random)
 
         return qlist[:correct] + (['dummy'] * (len(qlist) - correct))
+
+
+class DummyRelationalAttack(RelationalAttack):
+    """A dummy attack for validation purposes."""
+    @classmethod
+    def name(cls) -> str:
+        return 'dummy'
+
+    @classmethod
+    def required_leakage(cls) -> List[LeakagePattern[Any]]:
+        return []
+
+    @classmethod
+    def required_extensions(cls) -> Set[Type[E]]:
+        return {IdentityExtension}
+
+    def recover(self, dataset: RelationalDatabase, queries: Iterable[RelationalQuery]) -> List[RelationalKeyword]:
+        qlist = list(queries)
+        correct = ceil(len(qlist) * random())
+
+        return qlist[:correct] + ([RelationalKeyword(None, -1, -1, "incorrect")] * (len(qlist) - correct))
 
 
 class RangeBaselineAttack(RangeAttack):
