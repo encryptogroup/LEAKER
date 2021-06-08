@@ -7,13 +7,15 @@ Authors: Amos Treiber
 from abc import abstractmethod
 from collections import namedtuple
 from logging import getLogger
-from typing import Union, Tuple, Iterator, Optional, Set, List
+from typing import Union, Tuple, Iterator, Optional, Set, List, Iterable
 
-from ..api import Dataset, Selectivity
+from .dataset import Dataset
+from .constants import Selectivity
 
 log = getLogger(__name__)
 
 RelationalQuery = namedtuple("RelationalQuery", ["id", "table", "attr", "value"])
+RelationalQuery.__eq__ = lambda x, y: x.id == y.id or (x.table == y.table and x.attr == y.attr and x.value == y.value)
 RelationalKeyword = RelationalQuery  # We see a "keyword" as a relational query
 
 
@@ -78,7 +80,7 @@ class RelationalDatabase(Dataset):
         pass
 
     @abstractmethod
-    def sample(self, rate: float, tables: Optional[Iterator[Union[str, int]]]) -> 'RelationalDatabase':
+    def sample(self, rate: float, tables: Optional[Iterable[Union[str, int]]]) -> 'RelationalDatabase':
         """
         Samples this database to the given percentage. This method is used to sample base data sets to known data rates
         to simulate partial knowledge of the full database.
@@ -89,7 +91,7 @@ class RelationalDatabase(Dataset):
         ----------
         rate : float
             the sample rate in [0, 1]
-        tables : Optional[Iterator[Union[str, int]]]
+        tables : Optional[Iterable[Union[str, int]]]
             tables or their identifiers that are assumed to be known in full to the adversary.
         """
         raise NotImplementedError
