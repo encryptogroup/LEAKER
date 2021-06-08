@@ -70,10 +70,7 @@ class SQLConnection:
         return ret, res
 
     def is_open(self) -> bool:
-        if self.__connection is not None:
-            return self.__connection.is_connected()
-        else:
-            return False
+        return self.__connection is not None
 
     def open(self) -> 'SQLConnection':
         try:
