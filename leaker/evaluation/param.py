@@ -10,7 +10,8 @@ from multiprocessing.pool import Pool
 from typing import List, Iterable, Union, Type, Dict, Optional, Iterator, Tuple, TypeVar
 
 from .errors import Error, MAError
-from ..api import AttackDefinition, Dataset, QuerySpace, Selectivity, Attack, RangeDatabase, Extension, KeywordQueryLog
+from ..api import AttackDefinition, Dataset, QuerySpace, Selectivity, Attack, RangeDatabase, Extension, \
+    KeywordQueryLog, RelationalDatabase
 
 log = getLogger(__name__)
 
@@ -27,7 +28,7 @@ class EvaluationCase:
     attacks: Union[AttackDefinition, Type[Attack], Iterable[Union[AttackDefinition, Type[Attack]]]]
         may be one or multiple elements of which each can be the type of an attack (i.e. a subclass of Attack) or an
         AttackDefinition (for example when specifying additional parameters)
-    dataset: Union[Dataset, RangeDatabase]
+    dataset: Union[Dataset, RangeDatabase, RelationalDatabase]
         the data set to evaluate the attacks on
     runs: int
         the number of runs of sampling new datasets for the kdr
@@ -63,7 +64,7 @@ class EvaluationCase:
     __error: Union[None, Type[Error]]
 
     def __init__(self, attacks: Union[AttackDefinition, Type[Attack], Iterable[Union[AttackDefinition, Type[Attack]]]],
-                 dataset: Union[Dataset, RangeDatabase], runs: int = 1, error: Type[Error] = None,
+                 dataset: Union[Dataset, RangeDatabase, RelationalDatabase], runs: int = 1, error: Type[Error] = None,
                  base_restriction_rates: Iterable[float] = None,
                  base_restrictions_repetitions: int = 1, max_keywords: int = 0,
                  selectivity: Selectivity = Selectivity.Independent, pickle_description: str = None):
@@ -146,40 +147,56 @@ class DatasetSampler:
     monotonic : bool
         whether to apply monotonic sampling as described above
         default: False
+    table_samples : Iterable[Union[str, int]]
+        For relational evaluations: The names or identifiers of tables that should not be sampled, i.e., are known to
+        the adversary in full.
     """
     __kdr_samples: Iterable[float]
+    __table_samples: Iterable[Union[str, int]]
 
     __reuse: bool
     __sample_monotonic: bool
 
     __sample_cache: Dict[Tuple[Dataset, float], Dataset]
 
-    def __init__(self, kdr_samples: Iterable[float], reuse: bool = False, monotonic: bool = False):
+    def __init__(self, kdr_samples: Iterable[float], reuse: bool = False, monotonic: bool = False,
+                 table_samples: Iterable[Union[str, int]] = None):
         self.__reuse = reuse
         self.__sample_monotonic = monotonic
 
         self.__kdr_samples = kdr_samples
+        self.__table_samples = table_samples
 
         self.__sample_cache = dict()
 
-    def __sample(self, dataset: Dataset, pool: Optional[Pool]) -> Iterator[Tuple[float, Dataset]]:
+    def __sample(self, dataset: Union[Dataset, RelationalDatabase], pool: Optional[Pool]) \
+            -> Iterator[Tuple[float, Dataset]]:
         sorted_samples = sorted(self.__kdr_samples, reverse=True)
-        prev: Dataset = dataset
+        prev: Union[Dataset, RelationalDatabase] = dataset
 
-        if pool is None or self.__sample_monotonic:
+        if pool is None or self.__sample_monotonic or isinstance(dataset, RelationalDatabase):
+            # TODO: parallel relational sampling, currently disabled due to MySQL concurrency problems
             for kdr in sorted_samples:
+                if isinstance(dataset, RelationalDatabase):
+                    kdr = (kdr, self.__table_samples)
+                else:
+                    kdr = (kdr,)
                 if self.__sample_monotonic:
-                    sampled = prev.sample(kdr)
+                    sampled = prev.sample(*kdr)
                     prev = sampled
                 else:
-                    sampled = dataset.sample(kdr)
+                    sampled = dataset.sample(*kdr)
 
-                yield kdr, sampled
+                yield kdr[0], sampled
         else:
-            yield from iter(pool.starmap(func=lambda rate: (rate, dataset.sample(rate)),
-                                         iterable=map(lambda rate: (rate,), sorted_samples)))
+            if isinstance(dataset, RelationalDatabase):
+                yield from iter(pool.starmap(func=lambda rate: (rate, dataset.sample(rate, self.__table_samples)),
+                                             iterable=map(lambda rate: (rate,), sorted_samples)))
+            else:
+                yield from iter(pool.starmap(func=lambda rate: (rate, dataset.sample(rate)),
+                                             iterable=map(lambda rate: (rate,), sorted_samples)))
 
-    def sample(self, datasets: Iterable[Dataset], pool: Optional[Pool] = None)\
+    def sample(self, datasets: Iterable[Dataset], pool: Optional[Pool] = None) \
             -> Iterator[Tuple[Dataset, float, Dataset]]:
         """
         Yields sub samples of the given data set for the configured known data rates.
@@ -247,7 +264,8 @@ class QuerySelector:
 
     __allow_repetition: bool
 
-    def __init__(self, query_space: Type[QuerySpace], query_log: KeywordQueryLog = None, selectivity: Selectivity = Selectivity.High,
+    def __init__(self, query_space: Type[QuerySpace], query_log: KeywordQueryLog = None,
+                 selectivity: Selectivity = Selectivity.High,
                  query_space_size: int = 500, queries: int = 150, allow_repetition: bool = False):
         self.__query_space = query_space
         self.__query_log = query_log

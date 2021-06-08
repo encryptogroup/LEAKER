@@ -151,9 +151,12 @@ class KeywordQuerySpace(QuerySpace):
                     f" {len(self.__space)}.")
                 length = len(space)
             space = list(space)
+            queries = list(map(lambda item: item[0], space))
             p = np.array(list(map(lambda item: float(item[1]), space)))
             p /= p.sum()
-            yield np.random.choice(list(map(lambda item: item[0], space)), length, p=p, replace=self.__allow_repetition)
+            """We can't sample directly for relational queries because np sees tuples as arrays"""
+            idx = np.random.choice(len(queries), length, p=p, replace=self.__allow_repetition)
+            yield [queries[i] for i in idx]
 
     def __len__(self) -> int:
         return len(self.__space)

@@ -39,8 +39,8 @@ class Evaluator:
 
 class KeywordAttackEvaluator(Evaluator):
     """
-    A KeywordAttackEvaluator can be used to run a full evaluation of one or multiple attacks on a specific dataset. It is capable
-    of running multiple attacks in parallel to speed up the evaluation.
+    A KeywordAttackEvaluator can be used to run a full evaluation of one or multiple attacks on a specific dataset.
+    It is capable of running multiple attacks in parallel to speed up the evaluation.
 
     Parameters
     ----------
@@ -150,6 +150,9 @@ class KeywordAttackEvaluator(Evaluator):
 
         for sink in self._sinks:
             sink.flush()
+
+
+RelationalAttackEvaluator = KeywordAttackEvaluator  # Works exactly the same as in the keyword case
 
 
 class RangeAttackEvaluator(Evaluator):
