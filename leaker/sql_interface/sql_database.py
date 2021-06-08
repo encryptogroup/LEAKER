@@ -12,6 +12,7 @@ from typing import Set, Iterator, Optional, Union, Tuple, List, Dict, TypeVar, T
 from ..api import RelationalDatabase, RelationalQuery, Extension
 from ..api.constants import MYSQL_IDENTIFIER, Selectivity
 from . import SQLConnection
+from ..extension import IdentityExtension
 
 
 log = getLogger(__name__)
@@ -47,7 +48,8 @@ class SQLRelationalDatabase(RelationalDatabase):
     _tables_ids: Dict[str, int]
 
     def __init__(self, name: str, is_sampled_or_restricted: bool = False):
-        log.info(f"Loading {name}.")
+        if not is_sampled_or_restricted:
+            log.info(f"Loading {name}.")
         super(SQLRelationalDatabase, self).__init__()
         self._is_sampled_or_restricted = is_sampled_or_restricted
         self.__name = name
@@ -69,7 +71,8 @@ class SQLRelationalDatabase(RelationalDatabase):
                 self._table_row_ids[self._tables_ids[table_name]] = set(r for r in self.row_ids() if r[0]
                                                                         == self._tables_ids[table_name])
 
-        log.info(f"Loading {name} completed.")
+        if not is_sampled_or_restricted:
+            log.info(f"Loading {name} completed.")
 
     def query(self, query: RelationalQuery) -> Iterator[Tuple[int, int]]:
         """
@@ -168,14 +171,15 @@ class SQLRelationalDatabase(RelationalDatabase):
         return self._row_ids
 
     def name(self) -> str:
-        return self.__backend_name
+        return self.__name
 
     def is_open(self) -> bool:
         return self._sql_connection.is_open()
 
     def open(self) -> 'SQLRelationalDatabase':
-        self._sql_connection.open()
-        self._sql_connection.execute_query(f"USE {self.__name}")
+        if not self.is_open():
+            self._sql_connection.open()
+            self._sql_connection.execute_query(f"USE {self.__backend_name}")
         return self
 
     def close(self) -> None:
@@ -266,15 +270,18 @@ class SampledSQLRelationalDatabase(SQLRelationalDatabase):
 
         self._row_ids = set(row_id for row_ids in table_row_ids.values() for row_id in row_ids)
         self._table_row_ids = table_row_ids
-        with self:
+        with self.__parent:
+            if not self.__parent.has_extension(IdentityExtension):
+                self.__parent.extend_with(IdentityExtension)
+            identity = self.__parent.get_extension(IdentityExtension)
             self._queries = [q for q in self.__parent.queries()
-                             if len(set(self.__parent.query(q)).intersection(self._table_row_ids[q.table])) > 0]
+                             if len(set(identity.doc_ids(q)).intersection(self._table_row_ids[q.table])) > 0]
 
             self.__rate = rate
 
             self._set_extensions(map(lambda ext: ext.sample(self), parent._get_extensions()))
 
-        log.info(f"Sampling Whoosh Index '{parent.name()}' complete")
+        log.info(f"Sampling SQL Index '{self.name()}' complete")
 
     def name(self) -> str:
         return f"{super(SampledSQLRelationalDatabase, self).name()}@{self.__rate}"

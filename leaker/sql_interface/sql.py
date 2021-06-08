@@ -62,14 +62,18 @@ class SQLConnection:
                 if select and cursor.rowcount > 0:
                     res = [r for r in cursor.fetchall()]  # we need to consume all results before we can move on.
                 ret = 0
+                self.__connection.commit()
             except Error as err:
                 log.debug(f"Error when performing query {query}: '{err.errno}'")
                 ret = err.errno
-            self.__connection.commit()
+
         return ret, res
 
     def is_open(self) -> bool:
-        return self.__connection is not None
+        if self.__connection is not None:
+            return self.__connection.is_connected()
+        else:
+            return False
 
     def open(self) -> 'SQLConnection':
         try:
@@ -79,7 +83,7 @@ class SQLConnection:
                 passwd=self.__user_password,
                 buffered=True
             )
-            log.info(f"MySQL Database connection to {self.__host_name} successful.")
+            log.debug(f"MySQL Database connection to {self.__host_name} successful.")
         except Error as err:
             log.warning(f"MySQL Database connection to {self.__host_name} failed: {err}. Perhaps you did not set up"
                         f"a MySQL server or the LEAKER user yet.")

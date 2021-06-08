@@ -22,8 +22,7 @@ class SQLBackend(Backend):
             return ret == 0
 
     def load(self, name: str) -> SQLRelationalDatabase:
-        internal_name = f"{MYSQL_IDENTIFIER}_{name}"
-        return SQLRelationalDatabase(internal_name)
+        return SQLRelationalDatabase(name)
 
     def data_sets(self) -> Set[str]:
         with SQLConnection() as conn:
