@@ -7,7 +7,7 @@ Authors: Amos Treiber
 from abc import abstractmethod
 from collections import namedtuple
 from logging import getLogger
-from typing import Union, Tuple, Iterator, Optional, Set, List, Iterable, NamedTuple
+from typing import Union, Tuple, Iterator, Optional, Set, List, Iterable
 
 from .dataset import Dataset
 from .constants import Selectivity
@@ -18,10 +18,13 @@ RelationalQuery = namedtuple("RelationalQuery", ["id", "table", "attr", "value"]
 
 
 def query_equality(x: RelationalQuery, y: RelationalQuery):
-    if not isinstance(x, NamedTuple) or not isinstance(y, NamedTuple):
+    ret = True
+    if not isinstance(x, RelationalQuery) or not isinstance(y, RelationalQuery):
         return False
-    else:
-        return x.id == y.id or (x.table == y.table and x.attr == y.attr and x.value == y.value)
+    elif isinstance(x.id, int) and isinstance(y.id, int):
+        ret = ret and x.id == y. id
+    ret = ret and x.table == y.table and x.attr == y.attr and x.value == y.value
+    return ret
 
 
 RelationalQuery.__eq__ = query_equality
