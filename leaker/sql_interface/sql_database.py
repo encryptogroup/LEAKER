@@ -166,8 +166,11 @@ class SQLRelationalDatabase(RelationalDatabase):
         """
         return self._tables_ids[table_name]
 
-    def row_ids(self) -> Set[Tuple[int, int]]:
-        """Returns the unique identifiers (table_id, row_id) of all entries in this DB."""
+    def row_ids(self, table_id: Optional[int] = None) -> Set[Tuple[int, int]]:
+        """Returns the unique identifiers (table_id, row_id) of all entries in this DB. Can be restricted to a
+        table_id"""
+        if table_id is not None:
+            return self._table_row_ids[table_id]
         if self._row_ids is None:
             ret, res = self._sql_connection.execute_query(f"SELECT table_id, row_id FROM queries_responses",
                                                           select=True)

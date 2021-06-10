@@ -77,8 +77,9 @@ class RelationalDatabase(Dataset):
         return self.queries()
 
     @abstractmethod
-    def row_ids(self) -> Set[Tuple[int, int]]:
-        """Returns the unique identifiers (table_id, row_id) of all entries in this DB."""
+    def row_ids(self, table_id: Optional[int] = None) -> Set[Tuple[int, int]]:
+        """Returns the unique identifiers (table_id, row_id) of all entries in this DB. Can be restricted to a
+        table_id"""
         raise NotImplementedError
 
     def doc_ids(self):
