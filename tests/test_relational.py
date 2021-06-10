@@ -11,12 +11,16 @@ from typing import List
 import pytest
 
 from leaker.api import Selectivity, QueryInputDocument, RelationalQuery
+from leaker.attack import PartialQuerySpace, Countv2
+from leaker.attack.dummy import DummyRelationalAttack
+from leaker.evaluation import EvaluationCase, RelationalAttackEvaluator, DatasetSampler, QuerySelector
 from leaker.extension import IdentityExtension, SelectivityExtension, CoOccurrenceExtension
 from leaker.pattern import ResponseIdentity, ResponseLength, CoOccurrence
 from leaker.preprocessing import Preprocessor, Filter, Sink
 from leaker.preprocessing.data import DirectoryEnumerator, RelativeFile, FileLoader, RelationalCsvParser, \
     FileToRelationalInputDocument
 from leaker.sql_interface import SQLRelationalDatabaseWriter, SQLBackend
+from .test_laa_eval import EvaluatorTestSink, init_rngs
 
 f = logging.Formatter(fmt='{asctime} {levelname:8.8} {process} --- [{threadName:12.12}] {name:32.32}: {message}',
                       style='{')
@@ -24,12 +28,9 @@ f = logging.Formatter(fmt='{asctime} {levelname:8.8} {process} --- [{threadName:
 console = logging.StreamHandler(sys.stdout)
 console.setFormatter(f)
 
-file = logging.FileHandler('test_relational.log', 'w', 'utf-8')
-file.setFormatter(f)
-
 log = logging.getLogger(__name__)
 
-logging.basicConfig(handlers=[console, file], level=logging.INFO)
+logging.basicConfig(handlers=[console], level=logging.DEBUG)
 
 
 def test_indexing():
@@ -100,16 +101,13 @@ def test_sampling():
 
     if not backend.has("random_csv"):
         test_indexing()
-
     rdb = backend.load("random_csv")
-
     with rdb:
         with rdb.sample(.2, [0]) as rdb_sample:
             assert rdb_sample.row_ids().issubset(rdb.row_ids())
             assert len(rdb_sample.row_ids()) < len(rdb.row_ids())
-
             queries = rdb_sample.queries(max_queries=100, sel=Selectivity.High)
-            for q in queries:
+            for i, q in enumerate(queries):
                 assert set(rdb_sample.query(q)).issubset(rdb_sample.row_ids())
                 if q.table == 0:
                     assert set(rdb_sample.query(q)) == set(rdb.query(q))
@@ -134,3 +132,40 @@ def test_sampling():
                 assert qid_pattern == results
                 assert rlen_pattern == rlens
                 assert cocc_pattern == cooccs
+
+
+def test_evaluation():
+    init_rngs(1)
+    backend = SQLBackend()
+
+    if not backend.has("random_csv"):
+        test_indexing()
+
+    rdb = backend.load("random_csv")
+
+    def verif_cb(series_id: str, kdr: float, rr: float, n: int) -> None:
+        if series_id != "Countv2" or kdr < 1:
+            assert (rr >= 0.00)
+        else:
+            assert rr >= 0.01
+
+    verifier = EvaluatorTestSink(verif_cb)
+
+    query_space = PartialQuerySpace
+    space_size = 500
+    query_size = 150
+    sel = Selectivity.High
+
+    for par, tab in [(1, None), (8, [1])]:
+        run = RelationalAttackEvaluator(evaluation_case=EvaluationCase(attacks=[DummyRelationalAttack, Countv2],
+                                                                       dataset=rdb, runs=2),
+                                        dataset_sampler=DatasetSampler(kdr_samples=[0.25, 0.5, 0.75, 1.0], reuse=True,
+                                                                       monotonic=False, table_samples=tab),
+                                        query_selector=QuerySelector(query_space=query_space,
+                                                                     selectivity=sel,
+                                                                     query_space_size=space_size, queries=query_size,
+                                                                     allow_repetition=False),
+                                        sinks=verifier,
+                                        parallelism=par)
+
+        run.run()
