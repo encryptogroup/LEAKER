@@ -7,7 +7,7 @@ Authors: Amos Treiber
 from abc import abstractmethod
 from collections import namedtuple
 from logging import getLogger
-from typing import Union, Tuple, Iterator, Optional, Set, List, Iterable
+from typing import Union, Tuple, Iterator, Optional, Set, List, Iterable, NamedTuple
 
 from .dataset import Dataset
 from .constants import Selectivity
@@ -15,8 +15,17 @@ from .constants import Selectivity
 log = getLogger(__name__)
 
 RelationalQuery = namedtuple("RelationalQuery", ["id", "table", "attr", "value"])
-RelationalQuery.__eq__ = lambda x, y: x.id == y.id or (x.table == y.table and x.attr == y.attr and x.value == y.value)
-RelationalKeyword = RelationalQuery  # We see a "keyword" as a relational query
+
+
+def query_equality(x: RelationalQuery, y: RelationalQuery):
+    if not isinstance(x, NamedTuple) or not isinstance(y, NamedTuple):
+        return False
+    else:
+        return x.id == y.id or (x.table == y.table and x.attr == y.attr and x.value == y.value)
+
+
+RelationalQuery.__eq__ = query_equality
+RelationalKeyword = RelationalQuery  # We see a relational "keyword" as a relational query
 
 
 class RelationalDatabase(Dataset):
