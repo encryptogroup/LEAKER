@@ -6,10 +6,12 @@ Authors: Tobias Stöckert, Amos Treiber
 """
 import collections
 import math
+from itertools import starmap
 from logging import getLogger
 from typing import Iterable, List, Any, Dict, Set, Counter, Tuple, TypeVar, Type
 
-from ..api import KeywordAttack, Dataset, LeakagePattern, Extension
+from ..api import KeywordAttack, Dataset, LeakagePattern, Extension, RelationalDatabase, RelationalQuery, \
+    RelationalKeyword
 from ..extension import CoOccurrenceExtension
 from ..pattern import CoOccurrence
 
@@ -119,7 +121,7 @@ class Countv2(BasicCount):
     def name(cls) -> str:
         return "Countv2"
 
-    def __calculate_interval(self, c_ks: int) -> Tuple[float, float]:
+    def _calculate_interval(self, c_ks: int) -> Tuple[float, float]:
         epsilon = math.sqrt(0.5 * (self._n - self._delta * self._n) * math.log2(40))
         lbk = c_ks / self._delta - epsilon
         ubk = c_ks / self._delta + epsilon
@@ -127,7 +129,7 @@ class Countv2(BasicCount):
 
     def __calculate_candidates(self, queries: Iterable[str], rlens: List[int]) -> List[Set[str]]:
         return [set([w for w, (lbk, ubk) in
-                     zip(self._known_keywords, map(self.__calculate_interval,
+                     zip(self._known_keywords, map(self._calculate_interval,
                                                    map(self._known_response_length, self._known_keywords)))
                      if lbk <= rlens[i] <= ubk]) for i, _ in enumerate(queries)]
 
@@ -153,7 +155,7 @@ class Countv2(BasicCount):
                 candidate_keywords = [w for w in query_candidates[i] if w not in known_queries.values()]
                 for s in candidate_keywords[:]:
                     for j, k in known_queries.items():
-                        lbk, ubk = self.__calculate_interval(self._known_coocc.co_occurrence(s, k))
+                        lbk, ubk = self._calculate_interval(self._known_coocc.co_occurrence(s, k))
                         if not (lbk <= coocc[i][j] <= ubk):
                             candidate_keywords.remove(s)
                             break
@@ -175,3 +177,123 @@ class Countv2(BasicCount):
         log.info(f"Reconstruction completed.")
 
         return uncovered
+
+
+class RiondatoCount(Countv2):
+    """
+    Implements the Count attack with confidence intervals of Riondato et al. It uses the CoOccurrence and the
+    ResponseLength patterns.
+    """
+
+    _n: Dict[int, int]
+    _additional_methods: bool
+
+    def __init__(self, known: RelationalDatabase):
+        super(RiondatoCount, self).__init__(known)
+        self._additional_methods = False
+        self._n = dict()
+        for t, ids in known._table_row_ids.items():
+            self._n[t] = len(ids)
+
+    @classmethod
+    def name(cls) -> str:
+        return "Riondato-Count"
+
+    def _calculate_interval(self, c_ks: int, n: int, m: int = 1) -> Tuple[float, float]:
+        if m == 1:
+            d = 2
+            n_r = 1000
+            target_epsilon = 0.05
+        else:
+            d = 31
+            n_r = 6800
+            target_epsilon = 0.005
+
+        if d - 2 * target_epsilon ** 2 * n > 0:
+            delta = math.exp(d - 2 * target_epsilon ** 2 * n)
+        else:
+            delta = math.exp(d - 2 * target_epsilon ** 2 * n_r)  # TODO: this should not occur
+
+        if delta == 0:
+            log.warning(f"delta 0 at {self._delta, n, m}")
+            epsilon = 0
+        else:
+            epsilon = math.sqrt(1 / (2 * n) * (d + math.log(1 / delta)))
+
+        if self._delta == 1:
+            epsilon = 0
+
+        lbk = c_ks / n - epsilon
+        ubk = c_ks / n + epsilon
+        return lbk, ubk
+
+    def __calculate_candidates(self, queries: Iterable[RelationalQuery], rlens: List[float]) \
+            -> List[Set[RelationalKeyword]]:
+        return [set([w for w, (lbk, ubk) in
+                     zip(self._known_keywords, starmap(self._calculate_interval,
+                                                       map(lambda x: (self._known_response_length(x), self._n[x.table]),
+                                                           self._known_keywords)))
+                     if lbk <= rlens[i] <= ubk and w.table == q.table]) for i, q in enumerate(queries)]
+
+    def recover(self, dataset: Dataset, queries: Iterable[RelationalQuery]) -> List[str]:
+        log.info(f"Running {self.name()} on {dataset.name()} for {self._delta:.3f}")
+        coocc = self.required_leakage()[0](dataset, queries)
+        rlens = [coocc[i][i] for i, _ in enumerate(queries)]
+
+        query_tables = [q.table for q in queries]  # we assume which table and their full length is leaked
+        query_tables_length = [len(dataset._table_row_ids[t]) for t in query_tables]
+
+        query_candidates = self.__calculate_candidates(queries, [rlens[i] / query_tables_length[i]
+                                                                 for i in range(len(rlens))])
+        known_queries: Dict[int, RelationalKeyword] = {i: next(iter(query_candidates[i])) for i, _ in enumerate(queries)
+                                                       if len(query_candidates[i]) == 1}
+
+        while True:
+            unknown_queries = [i for i, _ in enumerate(queries) if i not in known_queries]
+            old_size = len(known_queries)
+            for i in unknown_queries:
+                candidate_keywords = [w for w in query_candidates[i] if w not in known_queries.values()]
+                for s in candidate_keywords[:]:
+                    for j, k in known_queries.items():
+                        lbk, ubk = self._calculate_interval(self._known_coocc.co_occurrence(s, k),
+                                                            n=self._n[s.table], m=2)
+                        if not (lbk <= coocc[i][j] / query_tables_length[i] <= ubk):
+                            candidate_keywords.remove(s)
+                            break
+
+                if self._additional_methods:
+                    for j, k in known_queries.items():
+                        for s in candidate_keywords[:]:
+                            if coocc[i][j] > 0 and s.attr == k.attr:
+                                candidate_keywords.remove(s)
+
+                if len(candidate_keywords) == 1:
+                    known_queries[i] = candidate_keywords[0]
+            if old_size >= len(known_queries):
+                break
+
+        uncovered = []
+        for i, _ in enumerate(queries):
+            if i in known_queries:
+                uncovered.append(known_queries[i])
+            # elif len([w for w in query_candidates[i] if w not in known_queries.values()]) != 0:
+            #   """We have multiple candidates => use fallback. Disabled for now."""
+            #   uncovered.append(self.__fallback(i, known_queries, query_candidates))
+            else:
+                uncovered.append("")
+
+        log.info(f"Reconstruction completed.")
+
+        return uncovered
+
+
+class AddRiondatoCount(RiondatoCount):
+    """Uses additional observations about relational databases"""
+
+    def __init__(self, known: RelationalDatabase):
+        super(AddRiondatoCount, self).__init__(known)
+        self._additional_methods = True
+
+    @classmethod
+    def name(cls) -> str:
+        return "AddRiondato"
