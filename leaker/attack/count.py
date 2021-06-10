@@ -39,7 +39,7 @@ class BasicCount(KeywordAttack):
 
         _known_response_length: Dict[str, int] = dict()
         for keyword in known.keywords():
-            _known_response_length[keyword] = self._known_coocc.co_occurrence(keyword, keyword)
+            _known_response_length[keyword] = self._known_coocc.selectivity(keyword)
 
         known_keyword_count: Counter[int] = collections.Counter(_known_response_length.values())
 
