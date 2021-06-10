@@ -95,20 +95,27 @@ class SQLRelationalDatabase(RelationalDatabase):
         query : Iterator[Tuple[int, int]]
             an iterator yielding all matches (table_id,row id) for the query
         """
-        if query.id is not None:
-            ret, res = self._sql_connection.execute_query(f"SELECT table_id, row_id FROM queries_responses "
-                                                          f"WHERE query_id = {query.id}", select=True)
-        else:
-            ret, res = self._sql_connection.execute_query(f"SELECT queries.table_id, row_id FROM "
-                                                          f"queries, queries_responses  "
-                                                          f"WHERE queries_responses.query_id = queries.query_id AND "
-                                                          f"queries.table_id = {query.table} AND "
-                                                          f"queries.attr_id = {query.attr} AND "
-                                                          f"queries.val = '{query.value}'", select=True)
+        use_ext = False
+        if self.has_extension(IdentityExtension):
+            if query in self.get_extension(IdentityExtension).get_identity_cache().keys():
+                use_ext = True
+                yield from self.get_extension(IdentityExtension).doc_ids(query)
 
-        if res is not None:
-            for r in res:
-                yield r[0], r[1]
+        if not use_ext:
+            if query.id is not None:
+                ret, res = self._sql_connection.execute_query(f"SELECT table_id, row_id FROM queries_responses "
+                                                              f"WHERE query_id = {query.id}", select=True)
+            else:
+                ret, res = self._sql_connection.execute_query(f"SELECT queries.table_id, row_id FROM "
+                                                              f"queries, queries_responses  "
+                                                              f"WHERE queries_responses.query_id = queries.query_id AND "
+                                                              f"queries.table_id = {query.table} AND "
+                                                              f"queries.attr_id = {query.attr} AND "
+                                                              f"queries.val = '{query.value}'", select=True)
+
+            if res is not None:
+                for r in res:
+                    yield r[0], r[1]
 
     def queries(self, max_queries: Optional[int] = None, table: Optional[int] = None, attr: Optional[int] = None,
                 sel: Optional[Selectivity] = None) -> List[RelationalQuery]:
@@ -227,7 +234,8 @@ class SQLRelationalDatabase(RelationalDatabase):
 
     def selectivity(self,  query: RelationalQuery) -> int:
         if self.has_extension(SelectivityExtension):
-            return self.get_extension(SelectivityExtension).selectivity(query)
+            if query in self.get_extension(SelectivityExtension).get_identity_cache().keys():
+                return self.get_extension(SelectivityExtension).selectivity(query)
 
         if query.id is not None:
             ret, res = self._sql_connection.execute_query(f"SELECT selectivity FROM queries "
@@ -362,15 +370,19 @@ class SampledSQLRelationalDatabase(SQLRelationalDatabase):
         query : Iterator[Tuple[int, int]]
             an iterator yielding all matches (table_id,row id) for the query
         """
+        use_ext = False
         if self.has_extension(IdentityExtension):
-            yield from self.get_extension(IdentityExtension).doc_ids(query)
-        else:
+            if query in self.get_extension(IdentityExtension).get_identity_cache().keys():
+                use_ext = True
+                yield from self.get_extension(IdentityExtension).doc_ids(query)
+
+        if not use_ext:
             for row_id in self.__parent.query(query):
                 if row_id in self._table_row_ids[query.table]:
                     yield row_id
 
     def selectivity(self,  query: RelationalQuery) -> int:
         if self.has_extension(SelectivityExtension):
-            return self.get_extension(SelectivityExtension).selectivity(query)
-        else:
-            return sum(1 for _ in self.query(query))
+            if query in self.get_extension(SelectivityExtension).get_identity_cache().keys():
+                return self.get_extension(SelectivityExtension).selectivity(query)
+        return sum(1 for _ in self.query(query))

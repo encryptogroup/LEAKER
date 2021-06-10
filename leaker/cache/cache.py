@@ -34,6 +34,10 @@ class Cache(Generic[A, T], Mapping[A, T]):
 
         return val
 
+    def __contains__(self, item: A) -> bool:
+        """Denotes if item has been cached already or would be computed if accessed"""
+        return item in self.__cache.keys()
+
     def __getitem__(self, key: A) -> T:
         return self.compute_if_absent(key)
 
