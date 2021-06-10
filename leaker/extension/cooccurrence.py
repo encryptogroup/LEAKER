@@ -87,7 +87,7 @@ class CoOccurrenceExtension(SelectivityExtension):
             else:
                 log.info(f"Creating CoOccurrence Cache for '{dataset.name()}'. This might take a while.")
                 self.__is_sampled = False
-                max_elements = 0  # int(len(dataset.keywords()) / 8)
+                max_elements = len(dataset.keywords())
                 if not dataset.is_open():
                     with dataset:
                         self.__coocc_cache = \

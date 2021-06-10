@@ -69,14 +69,15 @@ class IdentityExtension(Extension, ABC):
                         log.debug("Opening dataset for caching")
                         with dataset:
                             if isinstance(dataset, RelationalDatabase):
-                                self._identity_cache = Cache.build(lambda kw: set(dataset.query(kw)))
+                                self._identity_cache = Cache.build(lambda kw: set(dataset.query(kw)),
+                                                                   dataset.keywords())
                             else:
                                 self._identity_cache = Cache.build(lambda kw: set(map(lambda doc: doc.id(),
                                                                                       dataset(kw))),
                                                                    dataset.keywords())
                     else:
                         if isinstance(dataset, RelationalDatabase):
-                            self._identity_cache = Cache.build(lambda kw: set(dataset.query(kw)))
+                            self._identity_cache = Cache.build(lambda kw: set(dataset.query(kw)), dataset.keywords())
                         else:
                             self._identity_cache = Cache.build(lambda kw: set(map(lambda doc: doc.id(), dataset(kw))),
                                                                dataset.keywords())
