@@ -18,12 +18,13 @@ RelationalQuery = namedtuple("RelationalQuery", ["id", "table", "attr", "value"]
 
 
 def query_equality(x: RelationalQuery, y: RelationalQuery):
-    ret = True
+    """2 Queries are equal if they have the same id, or same content"""
+    ret = False
     if not isinstance(x, RelationalQuery) or not isinstance(y, RelationalQuery):
         return False
     elif isinstance(x.id, int) and isinstance(y.id, int):
-        ret = ret and x.id == y. id
-    ret = ret and x.table == y.table and x.attr == y.attr and x.value == y.value
+        ret = ret or x.id == y. id
+    ret = ret or x.table == y.table and x.attr == y.attr and x.value == y.value
     return ret
 
 
