@@ -10,7 +10,7 @@ from typing import Tuple, List
 from ..preprocessing import Sink, Source
 from . import SQLConnection
 from .sql import SQL_DATABASE_ALREADY_EXISTS
-from ..api.constants import MYSQL_IDENTIFIER
+from ..api.constants import MYSQL_IDENTIFIER, SQL_WRITING_INTERVAL
 
 log = getLogger(__name__)
 
@@ -71,15 +71,21 @@ class SQLRelationalDatabaseWriter(Sink[List[Tuple[str, List[str]]]]):
                 if prev_table_name != table_name:
                     if len(current_table_queries) > 0:
                         log.info(f"Indexing {len(current_table_queries)} queries for {prev_table_name}.")
-                    for query, responses in current_table_queries.items():  # flush current_table_queries
+
+                    items = list(current_table_queries.items())
+                    items.sort(key=lambda t: len(t[1]), reverse=True)
+
+                    for query, responses in items[:100]:  # flush current_table_queries
                         """TODO: Add possibility to restrict to most/least freq queries/keyword"""
                         sql_connection.execute_query(f"INSERT INTO queries VALUES "
                                                      f"({current_query_id}, {current_table_id}, {query[0]}, "
                                                      f"'{query[1]}', {len(responses)})")
-                        for row_id in responses:
-                            sql_connection.execute_query(f"INSERT INTO queries_responses VALUES "
-                                                         f"({current_query_id}, {current_table_id}, {row_id})")
 
+                        for pos in range(0, len(responses), SQL_WRITING_INTERVAL):
+                            sql_connection.execute_query(f"INSERT INTO queries_responses VALUES " +
+                                                         ",".join(f"({current_query_id}, {current_table_id}, {row_id})"
+                                                                  for row_id in
+                                                                  responses[pos:pos + SQL_WRITING_INTERVAL]))
                         current_query_id += 1
 
                     current_table_queries = dict()
@@ -89,37 +95,31 @@ class SQLRelationalDatabaseWriter(Sink[List[Tuple[str, List[str]]]]):
                     current_table_id += 1
                     sql_connection.execute_query(f"INSERT INTO tables VALUES ({current_table_id}, '{table_name}')")
 
-                    attributes = ", ".join([f"attr_{i} VARCHAR(32)" for i in range(len(values))])
-                    sql_connection.execute_query(f"CREATE TABLE {table_name} ("
-                    "table_id INT(8), "
-                    "row_id INT(8) UNSIGNED PRIMARY KEY, "
-                    f"{attributes})")
-
                     prev_table_name = table_name
 
-                # Add values
-                val_str = f"{current_table_id}, {current_row_id}, " + ", ".join([f"'{v}'" for v in values])
-                if sql_connection.execute_query(f"INSERT INTO {table_name} VALUES ({val_str})")[0] != 0:
-                    log.warning(f"Skipping entry not compatible with MySQL!")
-                else:
-                    for i, val in enumerate(values):  # Add queries
-                        if val == '':  # skip NULL values (we see them as invalid queries)
-                            continue
-                        if (i, val) not in current_table_queries.keys():
-                            current_table_queries[(i, val)] = [current_row_id]
-                        else:
-                            current_table_queries[(i, val)].append(current_row_id)
+                for i, val in enumerate(values):  # Add queries
+                    if val == '':  # skip NULL values (we see them as invalid queries)
+                        continue
+                    if (i, val) not in current_table_queries.keys():
+                        current_table_queries[(i, val)] = [current_row_id]
+                    else:
+                        current_table_queries[(i, val)].append(current_row_id)
                     current_row_id += 1
 
             if len(current_table_queries) > 0:
                 log.info(f"Indexing {len(current_table_queries)} queries for {table_name}.")
-            for query, responses in current_table_queries.items():  # final flush of current_table_queries
+            items = list(current_table_queries.items())
+            items.sort(key=lambda t: len(t[1]), reverse=True)
+
+            for query, responses in items[:100]:  # final flush of current_table_queries
                 sql_connection.execute_query(f"INSERT INTO queries VALUES "
-                                                 f"({current_query_id}, {current_table_id}, {query[0]}, '{query[1]}', "
-                                                 f"{len(responses)})")
-                for row_id in responses:
-                    sql_connection.execute_query(f"INSERT INTO queries_responses VALUES "
-                                                     f"({current_query_id}, {current_table_id}, {row_id})")
+                                             f"({current_query_id}, {current_table_id}, {query[0]}, '{query[1]}', "
+                                             f"{len(responses)})")
+                for pos in range(0, len(responses), SQL_WRITING_INTERVAL):
+                    sql_connection.execute_query(f"INSERT INTO queries_responses VALUES " +
+                                                 ",".join(f"({current_query_id}, {current_table_id}, {row_id})"
+                                                          for row_id in
+                                                          responses[pos:pos + SQL_WRITING_INTERVAL]))
 
                 current_query_id += 1
 

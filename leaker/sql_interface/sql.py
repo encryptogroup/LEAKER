@@ -44,12 +44,13 @@ class SQLConnection:
         self.__user_password = user_password
         self.__user_name = user_name
 
-    def execute_query(self, query: str, select: bool = False) -> Tuple[int, Union[None, List]]:
+    def execute_query(self, query: str, select: bool = False, params: Tuple = ()) -> Tuple[int, Union[None, List]]:
         """
         Executes a certain query. If results are expected, select has to be set to True. This is necessary because
         cursor.rowcount displays rows_affected for non-DQL (non-SELECT) queries, but we do not need them.
-        :param query:
-        :param select:
+        :param query: query string
+        :param select: if results are expected
+        :param params: Additional parameters
         :return: (ret, res): ret is the return value of the query (0 indicating success), and res is a list of the
                              results (or None if no results are returned or expected)
         """
@@ -58,13 +59,13 @@ class SQLConnection:
         res = None
         with self.__connection.cursor(buffered=True) as cursor:
             try:
-                cursor.execute(query)
+                cursor.execute(query, params)
                 if select and cursor.rowcount > 0:
                     res = [r for r in cursor.fetchall()]  # we need to consume all results before we can move on.
                 ret = 0
                 self.__connection.commit()
             except Error as err:
-                log.debug(f"Error when performing query {query}: '{err.errno}'")
+                log.debug(f"Error when performing query {query[:100]}: '{err.errno}'")
                 ret = err.errno
 
         return ret, res
