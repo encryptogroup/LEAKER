@@ -3,22 +3,21 @@ from logging import getLogger
 from typing import List, Any, Set, Type, TypeVar, Iterable, Dict
 
 from leaker.api import KeywordAttack, LeakagePattern, Extension, Dataset
-from leaker.extension import CoOccurrenceExtension
+from leaker.extension import CoOccurrenceExtension, IdentityExtension
 from leaker.pattern import CoOccurrence
 
-from ikk_roessink.ikk import IKK
-from ikk_roessink.matrix_generation import MatrixGenerator
+from .ikk_roessink.ikk import IKK
+from .ikk_roessink.matrix_generation import MatrixGenerator
 
 log = getLogger(__name__)
 
 E = TypeVar("E", bound=Extension, covariant=True)
 
 
-class Ikk_optimized(KeywordAttack):
+class Ikkoptimized(KeywordAttack):
     """
     Implements the optimized version of the attack from [IKK12] by Groot Roessink.
     """
-    _known_keywords: Set[str]
     _known_coocc: CoOccurrenceExtension
     _init_temperature: float
     _cooling_rate: float
@@ -35,13 +34,8 @@ class Ikk_optimized(KeywordAttack):
                  cooling_rate: float = 0.99999, reject_threshold: int = 10000, known_query_size: float = 0.15,
                  deterministic: bool = False, num_runs: int = 1):
         log.info(f"Setting up Ikk_optimized attack for {known.name()}. This might take some time.")
-        super(Ikk_optimized, self).__init__(known)
+        super(Ikkoptimized, self).__init__(known)
 
-        if not known.has_extension(CoOccurrenceExtension):
-            known.extend_with(CoOccurrenceExtension)
-        self._known_coocc = known.get_extension(CoOccurrenceExtension)
-
-        self._known_keywords = known.keywords()
         self._known_response_length = dict()
         self._init_temperature = init_temperature
         self._min_temperature = min_temperature
@@ -57,8 +51,9 @@ class Ikk_optimized(KeywordAttack):
 
         self._background_knowledge = known
         # TODO ensure we are comparing the right types, result of query can be either string or document
-        self._background_index = self._gen.generate_inverted_index(self._get_files_per_keyword(self._background_knowledge),
-                                                             self._background_knowledge.documents())
+        self._background_index = self._gen.generate_inverted_index(
+            self._get_files_per_keyword(self._background_knowledge, list(self._background_knowledge.keywords())), list(
+                [d.id() for d in self._background_knowledge.documents()]))
         self._background_cooc = self._gen.generate_cooccurrence_matrix(self._background_index)
 
         log.info("Setup complete.")
@@ -71,26 +66,30 @@ class Ikk_optimized(KeywordAttack):
     @classmethod
     def required_leakage(cls) -> List[LeakagePattern[Any]]:
         # not sure if this is sufficient due to usage of index and differenct cooc matrix
-        return [CoOccurrence()]
+        return []
 
     @classmethod
     def required_extensions(cls) -> Set[Type[E]]:
-        return {CoOccurrenceExtension}
+        return {IdentityExtension}
 
-    def _get_files_per_keyword(self, dataset: Dataset):
-        kws = dataset.keywords()
-        res = {kw: list(dataset.query(kw)) for kw in kws}
+    def _get_files_per_keyword(self, dataset: Dataset, keywords: List[str]):
+        if not dataset.has_extension(IdentityExtension):
+            dataset.extend_with(IdentityExtension)
+
+        ident = dataset.get_extension(IdentityExtension)
+        res = {kw: list(ident.doc_ids(kw)) for kw in keywords}
         return res
 
     # TODO check if we need new code to handle generation of server knowledge
     def recover(self, dataset: Dataset, queries: Iterable[str]) -> List[str]:
         server_knowledge = dataset
-        server_index = self._gen.generate_inverted_index(self._get_files_per_keyword(server_knowledge),
-                                                         server_knowledge.documents())
+        log.info(f"Running {self.name()}")
+        server_index = self._gen.generate_inverted_index(self._get_files_per_keyword(server_knowledge, list(queries)),
+                                                         list([d.id() for d in server_knowledge.documents()]))
         server_cooc = self._gen.generate_cooccurrence_matrix(server_index)
 
         states: List[Dict] = []  # The dict maps queries to keywords
-
+        log.info(f"Running {self.name()} optimizer.")
         for i in range(self._num_runs):
             state, temperature, rejects, e, count_total, count_accepted = self._ikk.optimizer(
                 server_knowledge_cooccurrence_matrix=server_cooc,
@@ -120,5 +119,5 @@ class Ikk_optimized(KeywordAttack):
                     best_candidate = None
 
             result.append(best_candidate)
-
+        log.info(f"Reconstruction completed.")
         return result
