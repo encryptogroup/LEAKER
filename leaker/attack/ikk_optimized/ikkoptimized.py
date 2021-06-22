@@ -5,7 +5,6 @@ from leaker.api import KeywordAttack, LeakagePattern, Extension, Dataset
 from leaker.extension import CoOccurrenceExtension
 from leaker.pattern import CoOccurrence
 from .ikk_roessink.ikk import IKK
-from .ikk_roessink.matrix_generation import MatrixGenerator
 
 log = getLogger(__name__)
 
@@ -81,39 +80,29 @@ class Ikkoptimized(KeywordAttack):
     """
     Implements the optimized version of the attack from [IKK12] by Groot Roessink.
     """
-    _known_coocc: CoOccurrenceExtension
     _init_temperature: float
     _cooling_rate: float
     _reject_threshold: int
-    _known_query_size: float
     _deterministic: bool
     _num_runs: int
     _ikk: IKK
     _background_index: IndexInterface
     _background_cooc: CoOccInterface
-    _gen: MatrixGenerator
 
     def __init__(self, known: Dataset, init_temperature: float = 200000.0, min_temperature: float = 1e-06,
-                 cooling_rate: float = 0.99999, reject_threshold: int = 10000, known_query_size: float = 0.15,
-                 deterministic: bool = False, num_runs: int = 1):
-        log.info(f"Setting up Ikk_optimized attack for {known.name()}. This might take some time.")
+                 cooling_rate: float = 0.99999, reject_threshold: int = 10000, deterministic: bool = False,
+                 num_runs: int = 1):
+        log.info(f"Setting up {self.name()} for {known.name()}. This might take some time.")
         super(Ikkoptimized, self).__init__(known)
 
-        self._known_response_length = dict()
         self._init_temperature = init_temperature
         self._min_temperature = min_temperature
         self._cooling_rate = cooling_rate
         self._reject_threshold = reject_threshold
-        self._known_query_size = known_query_size
-
         self._deterministic = deterministic
         self._num_runs = num_runs
         self._ikk = IKK()
 
-        self._gen = MatrixGenerator()
-
-        self._background_knowledge = known
-        # TODO ensure we are comparing the right types, result of query can be either string or document
         self._background_index = IndexInterface(known, list(known.keywords()))
         self._background_cooc = CoOccInterface(known, list(known.keywords()))
 
@@ -131,7 +120,6 @@ class Ikkoptimized(KeywordAttack):
     def required_extensions(cls) -> Set[Type[E]]:
         return {CoOccurrenceExtension}
 
-    # TODO check if we need new code to handle generation of server knowledge
     def recover(self, dataset: Dataset, queries: Iterable[str]) -> List[str]:
         server_knowledge = dataset
         queries = list(queries)
@@ -141,7 +129,6 @@ class Ikkoptimized(KeywordAttack):
         server_cooc = CoOccInterface(server_knowledge, queries)
 
         states: List[Dict] = []  # The dict maps queries to keywords
-        log.info(f"Running {self.name()} optimizer.")
         for i in range(self._num_runs):
             state, temperature, rejects, e, count_total, count_accepted = self._ikk.optimizer(
                 server_knowledge_cooccurrence_matrix=server_cooc,
@@ -153,9 +140,6 @@ class Ikkoptimized(KeywordAttack):
 
         result = []
 
-        # TODO check if queries and the queries of the result are always the same
-        # is the case when queries only come from dataset that is passed to recover
-        # entries from bg are used to obtain the values, server is used for variables
         for query in queries:
             state_results = [state[query] for state in states]
 
