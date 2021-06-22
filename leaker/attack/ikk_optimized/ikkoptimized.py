@@ -1,17 +1,80 @@
 from logging import getLogger
-
-from typing import List, Any, Set, Type, TypeVar, Iterable, Dict
+from typing import List, Any, Set, Type, TypeVar, Iterable, Dict, Iterator, Tuple
 
 from leaker.api import KeywordAttack, LeakagePattern, Extension, Dataset
-from leaker.extension import CoOccurrenceExtension, IdentityExtension
+from leaker.extension import CoOccurrenceExtension
 from leaker.pattern import CoOccurrence
-
 from .ikk_roessink.ikk import IKK
 from .ikk_roessink.matrix_generation import MatrixGenerator
 
 log = getLogger(__name__)
 
 E = TypeVar("E", bound=Extension, covariant=True)
+
+
+class ListInterface(list):
+    """To overload df.index.tolist()"""
+    def tolist(self):
+        return self
+
+
+class LocInterface:
+    """To overload df.loc[a,b]"""
+    __ext: CoOccurrenceExtension
+
+    def __init__(self, ext: CoOccurrenceExtension):
+        self.__ext = ext
+
+    def __getitem__(self, item):
+        kw1, kw2 = item
+        return self.__ext.co_occurrence(kw1, kw2)
+
+
+class PandasInterface:
+    """
+    Interfaces with the Groot Roessink implementation and makes it compatible to LEAKER.
+    Makes the called code invoke pre-computed extensions instead of pandas dataframes.
+    It relies on the original implementation only making calles to .loc[a,b], .index.tolist(), .columns.tolist(),
+    and .iterrows().
+    """
+    _ext: CoOccurrenceExtension
+    columns: ListInterface
+    index: ListInterface
+
+    def __init__(self, dataset: Dataset, columns: ListInterface, index: ListInterface):
+        if not dataset.has_extension(CoOccurrenceExtension):
+            dataset.extend_with(CoOccurrenceExtension)
+
+        self._ext = dataset.get_extension(CoOccurrenceExtension)
+        self.columns = columns
+        self.index = index
+
+
+class IndexInterface(PandasInterface):
+    """Corresponds to 'index' in the Groot Roessink implementation. Instead of a list of indices, it is a truth
+    table whether a keyword appears in a document."""
+
+    def __init__(self, dataset: Dataset, keywords: List[str]):
+        super().__init__(dataset, ListInterface(dataset.doc_ids()), ListInterface(keywords))
+
+    def iterrows(self) -> Iterator[Tuple[str, List[bool]]]:
+        for kw in self.index:
+            doc_ids = self._ext.doc_ids(kw)
+            yield kw, [doc_id in doc_ids for doc_id in self.columns]
+
+
+class CoOccInterface(IndexInterface):
+    """Corresponds to 'cooccurrence' in the Groot Roessink implementation."""
+
+    loc: LocInterface
+
+    def __init__(self, dataset: Dataset, keywords: List[str]):
+        super().__init__(dataset, keywords)
+        self.loc = LocInterface(self._ext)
+
+    def iterrows(self) -> Iterator[Tuple[str, List[bool]]]:
+        """This should not be used"""
+        assert False
 
 
 class Ikkoptimized(KeywordAttack):
@@ -26,8 +89,8 @@ class Ikkoptimized(KeywordAttack):
     _deterministic: bool
     _num_runs: int
     _ikk: IKK
-    _background_index: Iterable
-    _background_cooc: Iterable
+    _background_index: IndexInterface
+    _background_cooc: CoOccInterface
     _gen: MatrixGenerator
 
     def __init__(self, known: Dataset, init_temperature: float = 200000.0, min_temperature: float = 1e-06,
@@ -51,13 +114,10 @@ class Ikkoptimized(KeywordAttack):
 
         self._background_knowledge = known
         # TODO ensure we are comparing the right types, result of query can be either string or document
-        self._background_index = self._gen.generate_inverted_index(
-            self._get_files_per_keyword(self._background_knowledge, list(self._background_knowledge.keywords())), list(
-                [d.id() for d in self._background_knowledge.documents()]))
-        self._background_cooc = self._gen.generate_cooccurrence_matrix(self._background_index)
+        self._background_index = IndexInterface(known, list(known.keywords()))
+        self._background_cooc = CoOccInterface(known, list(known.keywords()))
 
         log.info("Setup complete.")
-
 
     @classmethod
     def name(cls) -> str:
@@ -65,28 +125,20 @@ class Ikkoptimized(KeywordAttack):
 
     @classmethod
     def required_leakage(cls) -> List[LeakagePattern[Any]]:
-        # not sure if this is sufficient due to usage of index and differenct cooc matrix
-        return []
+        return [CoOccurrence()]
 
     @classmethod
     def required_extensions(cls) -> Set[Type[E]]:
-        return {IdentityExtension}
-
-    def _get_files_per_keyword(self, dataset: Dataset, keywords: List[str]):
-        if not dataset.has_extension(IdentityExtension):
-            dataset.extend_with(IdentityExtension)
-
-        ident = dataset.get_extension(IdentityExtension)
-        res = {kw: list(ident.doc_ids(kw)) for kw in keywords}
-        return res
+        return {CoOccurrenceExtension}
 
     # TODO check if we need new code to handle generation of server knowledge
     def recover(self, dataset: Dataset, queries: Iterable[str]) -> List[str]:
         server_knowledge = dataset
+        queries = list(queries)
         log.info(f"Running {self.name()}")
-        server_index = self._gen.generate_inverted_index(self._get_files_per_keyword(server_knowledge, list(queries)),
-                                                         list([d.id() for d in server_knowledge.documents()]))
-        server_cooc = self._gen.generate_cooccurrence_matrix(server_index)
+
+        server_index = IndexInterface(server_knowledge, queries)
+        server_cooc = CoOccInterface(server_knowledge, queries)
 
         states: List[Dict] = []  # The dict maps queries to keywords
         log.info(f"Running {self.name()} optimizer.")
