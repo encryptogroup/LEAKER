@@ -89,14 +89,12 @@ class Ikkoptimized(KeywordAttack):
     _background_index: IndexInterface
     _background_cooc: CoOccInterface
 
-    def __init__(self, known: Dataset, init_temperature: float = 200000.0, min_temperature: float = 1e-06,
-                 cooling_rate: float = 0.99999, reject_threshold: int = 10000, deterministic: bool = False,
-                 num_runs: int = 1):
+    def __init__(self, known: Dataset, init_temperature: float = 1.0, cooling_rate: float = 0.999,
+                 reject_threshold: int = 5000, deterministic: bool = False, num_runs: int = 1):
         log.info(f"Setting up {self.name()} for {known.name()}. This might take some time.")
         super(Ikkoptimized, self).__init__(known)
 
         self._init_temperature = init_temperature
-        self._min_temperature = min_temperature
         self._cooling_rate = cooling_rate
         self._reject_threshold = reject_threshold
         self._deterministic = deterministic
