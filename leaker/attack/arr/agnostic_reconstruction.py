@@ -9,6 +9,7 @@ from math import log
 from multiprocessing import Pool
 
 import numpy as np
+from scipy.optimize import least_squares
 
 from .estimators import modular_estimator
 
@@ -55,7 +56,7 @@ def arr(token_result_pairs, ordering, a, b, n, processes=1, e=0.01):
     uniq_resp = set(responses)
 
     weights = np.zeros((n + 1, n + 1)) + e
-    sizes = np.zeros((n + 1, n + 1)) + 1
+    sizes = np.zeros((n + 1, n + 1))
 
     if processes == 1:
         for uniq in uniq_resp:
@@ -72,31 +73,22 @@ def arr(token_result_pairs, ordering, a, b, n, processes=1, e=0.01):
                     L = 1
                 sizes[i][j_] = L
 
-    n_p = n
-    A_eq = np.zeros((n_p + 1, n_p + 1))
-    b_eq = np.zeros(n_p + 1)
+    def loss_function(x, weights, sizes, n):
+        res = 0
+        for i in range(n + 1):
+            for j in range(i + 1, n + 1):
+                res += weights[i][j] * (x[i] * x[j] - sizes[i][j]) ** 2
+        return res
 
-    for x_p in range(n_p + 1):
-        for y_p in range(n_p + 1):
-            if x_p > y_p:
-                A_eq[x_p][x_p] += 2 * weights[y_p][x_p]
-                A_eq[x_p][y_p] = 2 * weights[y_p][x_p]
-                b_eq[x_p] += 2 * weights[y_p][x_p] * log(sizes[y_p][x_p], 2)
-            elif y_p > x_p:
-                A_eq[x_p][y_p] = 2 * weights[x_p][y_p]
-                A_eq[x_p][x_p] += 2 * weights[x_p][y_p]
-                b_eq[x_p] += 2 * weights[x_p][y_p] * log(sizes[x_p][y_p], 2)
+    res = least_squares(loss_function, x0=[1] *  ( n + 1),  args=(weights, sizes, n), bounds=(0, np.inf))
+    x_opt = res.x
 
-    res = np.linalg.lstsq(A_eq, b_eq)
-    x_opt = res[0]
-
-    lengths = [2 ** x for x in x_opt]
-    scale_f = sum(lengths) / (b - a + 1)
-    lengths = [x / scale_f for x in lengths]
+    scale_f = sum(x_opt) / (b - a + 1)
+    lengths = [x / scale_f for x in x_opt]
 
     vals = np.zeros(n)
     last = a - 1
-    for y in range(n_p):
+    for y in range(n):
         last = last + lengths[y]
         vals[y] = last
 
