@@ -8,6 +8,7 @@ from itertools import repeat
 from math import log
 from multiprocessing import Pool
 
+import numba
 import numpy as np
 from scipy.optimize import least_squares
 
@@ -61,6 +62,8 @@ def arr(token_result_pairs, ordering, a, b, n, processes=1, e=0.01):
     if processes == 1:
         for uniq in uniq_resp:
             i, j_, w, L = calc_weight_and_size(uniq, token_result_pairs, ordering, e)
+            if not np.isfinite(L):
+                L = 0
             weights[i][j_] = w
             sizes[i][j_] = L
     else:
@@ -69,10 +72,11 @@ def arr(token_result_pairs, ordering, a, b, n, processes=1, e=0.01):
                                                           repeat(e)))
             for i, j_, w, L in results:
                 weights[i][j_] = w
-                if np.isnan(L):
-                    L = 1
+                if not np.isfinite(L):
+                    L = 0
                 sizes[i][j_] = L
 
+    @numba.njit
     def loss_function(x, weights, sizes, n):
         res = 0
         for i in range(n + 1):
@@ -80,7 +84,7 @@ def arr(token_result_pairs, ordering, a, b, n, processes=1, e=0.01):
                 res += weights[i][j] * (x[i] * x[j] - sizes[i][j]) ** 2
         return res
 
-    res = least_squares(loss_function, x0=[1] *  ( n + 1),  args=(weights, sizes, n), bounds=(0, np.inf))
+    res = least_squares(loss_function, x0=[1] * (n + 1), args=(weights, sizes, n), bounds=(0, np.inf), method='dogbox')
     x_opt = res.x
 
     scale_f = sum(x_opt) / (b - a + 1)
@@ -110,7 +114,7 @@ def general_arr(token_result_pairs, ordering, a, b, n, processes=1, e=0.01, minw
     :return: values of db
     """
     assert n == len(ordering)
-
+    """
     responses = [y for (_, y) in token_result_pairs]
     uniq_resp = set(responses)
 
@@ -193,10 +197,10 @@ def general_arr(token_result_pairs, ordering, a, b, n, processes=1, e=0.01, minw
         if i in to_rem:
             i += to_rem[i]
         i += 1
-
+    """
     # run on DB without repetitions
-    u_vals = arr(token_result_pairs, new_order, a, b, n_p, processes, e)
-
+    u_vals = arr(token_result_pairs, ordering, a, b, n, processes, e)
+    """
     vals = np.zeros(n)
 
     u_i = 0
@@ -210,6 +214,6 @@ def general_arr(token_result_pairs, ordering, a, b, n, processes=1, e=0.01, minw
             vals[idx] = v
 
     assert i + u_i + 1 == n
-
+    """
     perm = np.argsort(ordering)
-    return vals.take(perm), to_rem
+    return u_vals.take(perm), dict()
