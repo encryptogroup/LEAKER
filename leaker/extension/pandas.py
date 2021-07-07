@@ -4,7 +4,6 @@ For License information see the LICENSE file.
 Authors: Amos Treiber
 
 """
-from abc import ABC
 from logging import getLogger
 from typing import Optional, Dict, Union, Tuple
 
@@ -18,7 +17,7 @@ Keyword = Union[str, RelationalKeyword]
 Identifier = Union[str, Tuple[int, int]]
 
 
-class PandasExtension(Extension, ABC):
+class PandasExtension(Extension):
     """
     An extension caching a relational database as a pandas dataframe
 
@@ -46,12 +45,12 @@ class PandasExtension(Extension, ABC):
                 with dataset:
                     for table in dataset.tables():
                         table_id = dataset.table_id(table)
-                        self._df[table_id] = original_df[table_id].iloc[list(map(lambda x: x[1],
+                        self._df[table_id] = original_df[table_id].loc[list(map(lambda x: x[1],
                                                                                  dataset.row_ids(table_id)))]
             else:
                 for table in dataset.tables():
                     table_id = dataset.table_id(table)
-                    self._df[table_id] = original_df[table_id].iloc[
+                    self._df[table_id] = original_df[table_id].loc[
                         list(map(lambda x: x[1], dataset.row_ids(table_id)))]
 
             log.debug(f"Subsampling for '{dataset.name()}' complete")
