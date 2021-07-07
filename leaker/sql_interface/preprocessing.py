@@ -75,7 +75,7 @@ class SQLRelationalDatabaseWriter(Sink[List[Tuple[str, List[str]]]]):
                     items = list(current_table_queries.items())
                     items.sort(key=lambda t: len(t[1]), reverse=True)
 
-                    for query, responses in items[:100]:  # flush current_table_queries
+                    for query, responses in items:  # flush current_table_queries
                         """TODO: Add possibility to restrict to most/least freq queries/keyword"""
                         sql_connection.execute_query(f"INSERT INTO queries VALUES "
                                                      f"({current_query_id}, {current_table_id}, {query[0]}, "
@@ -104,14 +104,15 @@ class SQLRelationalDatabaseWriter(Sink[List[Tuple[str, List[str]]]]):
                         current_table_queries[(i, val)] = [current_row_id]
                     else:
                         current_table_queries[(i, val)].append(current_row_id)
-                    current_row_id += 1
+
+                current_row_id += 1
 
             if len(current_table_queries) > 0:
                 log.info(f"Indexing {len(current_table_queries)} queries for {table_name}.")
             items = list(current_table_queries.items())
             items.sort(key=lambda t: len(t[1]), reverse=True)
 
-            for query, responses in items[:100]:  # final flush of current_table_queries
+            for query, responses in items:  # final flush of current_table_queries
                 sql_connection.execute_query(f"INSERT INTO queries VALUES "
                                              f"({current_query_id}, {current_table_id}, {query[0]}, '{query[1]}', "
                                              f"{len(responses)})")
