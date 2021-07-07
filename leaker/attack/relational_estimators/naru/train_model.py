@@ -16,7 +16,7 @@ from . import transformer
 mean = False
 std = 0
 
-DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+DEVICE = 'cpu'  # 'cuda' if torch.cuda.is_available() else 'cpu'
 print('Device', DEVICE)
 
 parser = argparse.ArgumentParser()
