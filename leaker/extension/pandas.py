@@ -11,7 +11,6 @@ from typing import Optional, Dict, Union, Tuple
 import pandas as pd
 
 from ..api import Extension, Dataset, RelationalKeyword, RelationalDatabase
-from ..sql_interface import SQLRelationalDatabase
 
 log = getLogger(__name__)
 
@@ -36,7 +35,7 @@ class PandasExtension(Extension, ABC):
     _df: Dict[int, pd.DataFrame]
 
     # noinspection PyMissingConstructor
-    def __init__(self, dataset: SQLRelationalDatabase, original_df: Optional[Dict[int, pd.DataFrame]] = None):
+    def __init__(self, dataset: RelationalDatabase, original_df: Optional[Dict[int, pd.DataFrame]] = None):
 
         self._df = dict()
         if original_df is not None:

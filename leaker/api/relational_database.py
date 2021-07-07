@@ -94,6 +94,21 @@ class RelationalDatabase(Dataset):
         pass
 
     @abstractmethod
+    def tables(self) -> Iterator[str]:
+        """
+        :return: tables: names of the table in the database
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def table_id(self, table_name: str) -> int:
+        """
+        :param table_name: String of the table
+        :return: table_id: internal id of the table
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     def sample(self, rate: float, tables: Optional[Iterable[Union[str, int]]]) -> 'RelationalDatabase':
         """
         Samples this database to the given percentage. This method is used to sample base data sets to known data rates
