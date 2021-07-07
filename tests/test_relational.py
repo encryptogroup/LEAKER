@@ -53,8 +53,8 @@ def test_backend():
 
     with rdb:
 
-        assert len(rdb.queries()) == 4412
-        assert len(rdb.row_ids()) == 1286
+        assert len(rdb.queries()) == 4440
+        assert len(rdb.row_ids()) == 1298
 
         for q in rdb.queries(max_queries=100, sel=Selectivity.High):
             qp = RelationalQuery(None, q.table, q.attr, q.value)
