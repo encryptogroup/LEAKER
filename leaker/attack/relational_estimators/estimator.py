@@ -8,7 +8,7 @@ This file provides interfacing to various cardinality estimator implementations.
 """
 
 from abc import abstractmethod, ABC
-from typing import Any, Dict, Union
+from typing import Any, Dict, Union, Optional, Tuple
 
 import torch
 
@@ -47,7 +47,7 @@ class RelationalEstimator(ABC):
 class NaruRelationalEstimator(RelationalEstimator):
     """Uses the Naru estimator of Yang et al.: https://github.com/naru-project/naru"""
 
-    _table_dict: Dict[int, Table]
+    _table_dict: Dict[int, Tuple[Table, Table]]
     __epochs: int
     _estimator: Union[None, Dict[int, CardEst]] = None
 
@@ -61,11 +61,25 @@ class NaruRelationalEstimator(RelationalEstimator):
         pd_ext = self._dataset_sample.get_extension(PandasExtension)
         full_pd_ext = self._full.get_extension(PandasExtension)
 
-        for table in self._dataset_sample.tables():
-            table_id = self._dataset_sample.table_id(table)
-            df = pd_ext.get_df(table_id)
-            full_df = full_pd_ext.get_df(table_id)
-            self._table_dict[table_id] = (CsvTable(table, df, df.columns), CsvTable(table, full_df, full_df.columns))
+        if not self._dataset_sample.is_open():
+            with self._dataset_sample:
+                for table in self._dataset_sample.tables():
+                    table_id = self._dataset_sample.table_id(table)
+                    df = pd_ext.get_df(table_id)
+                    full_df = full_pd_ext.get_df(table_id)
+                    self._table_dict[table_id] = (CsvTable(table, df, df.columns),
+                                                  CsvTable(table, full_df, full_df.columns))
+
+                self.train()
+        else:
+            for table in self._dataset_sample.tables():
+                table_id = self._dataset_sample.table_id(table)
+                df = pd_ext.get_df(table_id)
+                full_df = full_pd_ext.get_df(table_id)
+                self._table_dict[table_id] = (
+                CsvTable(table, df, df.columns), CsvTable(table, full_df, full_df.columns))
+
+            self.train()
 
     def train(self) -> None:
         self._estimator = dict()
@@ -118,11 +132,18 @@ class NaruRelationalEstimator(RelationalEstimator):
             print(f"Done.")
             ReportModel(model)
 
-    def estimate(self, kw: RelationalKeyword) -> float:
+    def estimate(self, kw: RelationalKeyword, kw2: Optional[RelationalKeyword] = None) -> float:
         if self._estimator is None:
             self.train()
 
         table, _ = self._table_dict[kw.table]
-
-        return self._estimator[kw.table].Query([c for c in table.Columns() if f"attr_{kw.attr}" in c.name], "=",
+        if kw2 is None:
+            return self._estimator[kw.table].Query([c for c in table.Columns() if f"attr_{kw.attr}" in c.name], ["="],
                                                [kw.value])
+        else:
+            if kw2.table != kw.table:
+                return 0
+            else:
+                return self._estimator[kw.table].Query([c for c in table.Columns() if f"attr_{kw.attr}" in c.name] +
+                                                       [c for c in table.Columns() if f"attr_{kw2.attr}" in c.name],
+                                                       ["=", "="], [kw.value, kw2.value])
