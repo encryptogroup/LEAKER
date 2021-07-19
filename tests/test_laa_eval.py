@@ -106,7 +106,7 @@ def test_keyword_attack():
 
     def verif_cb(series_id: str, kdr: float, rr: float, n: int) -> None:
         golden_dict = {0.25: 0.01, 0.5: 0.1, 0.75: 0.2, 1: 0.5}
-        if series_id != "Countv2" or kdr == 1:
+        if series_id != "Countv2":
             assert (rr >= golden_dict[kdr])
 
     verifier = EvaluatorTestSink(verif_cb)
