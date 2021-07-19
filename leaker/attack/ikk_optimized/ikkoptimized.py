@@ -1,3 +1,10 @@
+"""
+This file interfaces a LEAKER attack with the Roessink IKK implementation.
+
+For License information see the LICENSE file.
+Authors: Amos Treiber, Michael Yonli
+"""
+
 from logging import getLogger
 from typing import List, Any, Set, Type, TypeVar, Iterable, Dict, Iterator, Tuple
 
@@ -33,7 +40,7 @@ class PandasInterface:
     """
     Interfaces with the Groot Roessink implementation and makes it compatible to LEAKER.
     Makes the called code invoke pre-computed extensions instead of pandas dataframes.
-    It relies on the original implementation only making calles to .loc[a,b], .index.tolist(), .columns.tolist(),
+    It relies on the original implementation only making calls to .loc[a,b], .index.tolist(), .columns.tolist(),
     and .iterrows().
     """
     _ext: CoOccurrenceExtension
