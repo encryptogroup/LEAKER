@@ -37,7 +37,7 @@ def test_indexing():
     rel_data = DirectoryEnumerator("data_sources/random_relational_tables")
     rel_filter: Filter[RelativeFile, QueryInputDocument] = FileLoader(RelationalCsvParser(delimiter=',')) | \
                                                            FileToRelationalInputDocument()
-    rel_sink: Sink[List] = SQLRelationalDatabaseWriter("random_csv")
+    rel_sink: Sink[List] = SQLRelationalDatabaseWriter("random_csv2")
 
     preprocessor = Preprocessor(rel_data, [rel_filter > rel_sink])
     preprocessor.run()
@@ -46,14 +46,14 @@ def test_indexing():
 def test_backend():
     backend = SQLBackend()
 
-    if not backend.has("random_csv"):
+    if not backend.has("random_csv2"):
         test_indexing()
 
-    rdb = backend.load("random_csv")
+    rdb = backend.load("random_csv2")
 
     with rdb:
 
-        assert len(rdb.queries()) == 4440
+        assert len(rdb.queries()) == 4450
         assert len(rdb.row_ids()) == 1298
 
         for q in rdb.queries(max_queries=100, sel=Selectivity.High):

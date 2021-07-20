@@ -74,19 +74,26 @@ class SQLRelationalDatabaseWriter(Sink[List[Tuple[str, List[str]]]]):
 
                     items = list(current_table_queries.items())
                     items.sort(key=lambda t: len(t[1]), reverse=True)
+                    queries = list(set(resp[0] for resp in items))
 
-                    for query, responses in items:  # flush current_table_queries
-                        """TODO: Add possibility to restrict to most/least freq queries/keyword"""
-                        sql_connection.execute_query(f"INSERT INTO queries VALUES "
-                                                     f"({current_query_id}, {current_table_id}, {query[0]}, "
-                                                     f"'{query[1]}', {len(responses)})")
+                    for pos in range(0, len(queries), SQL_WRITING_INTERVAL):
+                        sql_connection.execute_query(
+                            f"INSERT INTO queries VALUES " + ",".join(f"({current_query_id + pos + i}, "  # query id
+                                                                      f"{current_table_id}, "
+                                                                      f"{q[0]}, "
+                                                                      f"'{q[1][:32]}', "  # ensure we don't exceed size
+                                                                      f"{len(current_table_queries[q])})" for i, q in
+                                                                      enumerate(queries[pos:pos +
+                                                                                            SQL_WRITING_INTERVAL])))
 
-                        for pos in range(0, len(responses), SQL_WRITING_INTERVAL):
-                            sql_connection.execute_query(f"INSERT INTO queries_responses VALUES " +
-                                                         ",".join(f"({current_query_id}, {current_table_id}, {row_id})"
-                                                                  for row_id in
-                                                                  responses[pos:pos + SQL_WRITING_INTERVAL]))
-                        current_query_id += 1
+                    responses = [(current_query_id + i, row_id) for i, q in enumerate(queries)
+                                 for row_id in current_table_queries[q]]
+                    current_query_id += len(queries)
+                    for pos in range(0, len(responses), SQL_WRITING_INTERVAL):
+                        sql_connection.execute_query(f"INSERT INTO queries_responses VALUES " +
+                                                     ",".join(f"({i}, {current_table_id}, {row_id})"
+                                                              for i, row_id in
+                                                              responses[pos:pos + SQL_WRITING_INTERVAL]))
 
                     current_table_queries = dict()
                     current_row_id = 0
@@ -100,6 +107,7 @@ class SQLRelationalDatabaseWriter(Sink[List[Tuple[str, List[str]]]]):
                 for i, val in enumerate(values):  # Add queries
                     if val == '':  # skip NULL values (we see them as invalid queries)
                         continue
+                    val = val.replace("\'", "")  # may mess up SQL queries
                     if (i, val) not in current_table_queries.keys():
                         current_table_queries[(i, val)] = [current_row_id]
                     else:
@@ -109,19 +117,29 @@ class SQLRelationalDatabaseWriter(Sink[List[Tuple[str, List[str]]]]):
 
             if len(current_table_queries) > 0:
                 log.info(f"Indexing {len(current_table_queries)} queries for {table_name}.")
-            items = list(current_table_queries.items())
-            items.sort(key=lambda t: len(t[1]), reverse=True)
+                items = list(current_table_queries.items())
+                items.sort(key=lambda t: len(t[1]), reverse=True)
 
-            for query, responses in items:  # final flush of current_table_queries
-                sql_connection.execute_query(f"INSERT INTO queries VALUES "
-                                             f"({current_query_id}, {current_table_id}, {query[0]}, '{query[1]}', "
-                                             f"{len(responses)})")
+                # final flush of current_table_queries
+                queries = list(set(resp[0] for resp in items))
+
+                for pos in range(0, len(queries), SQL_WRITING_INTERVAL):
+                    sql_connection.execute_query(
+                        f"INSERT INTO queries VALUES " + ",".join(f"({current_query_id + pos + i}, "  # query id
+                                                                  f"{current_table_id}, "
+                                                                  f"{q[0]}, "
+                                                                  f"'{q[1][:32]}', "  # ensure we don't exceed size
+                                                                  f"{len(current_table_queries[q])})" for i, q in
+                                                                  enumerate(queries[pos:pos +
+                                                                                        SQL_WRITING_INTERVAL])))
+
+                responses = [(current_query_id + i, row_id) for i, q in enumerate(queries)
+                             for row_id in current_table_queries[q]]
+                current_query_id += len(queries)
                 for pos in range(0, len(responses), SQL_WRITING_INTERVAL):
                     sql_connection.execute_query(f"INSERT INTO queries_responses VALUES " +
-                                                 ",".join(f"({current_query_id}, {current_table_id}, {row_id})"
-                                                          for row_id in
+                                                 ",".join(f"({i}, {current_table_id}, {row_id})"
+                                                          for i, row_id in
                                                           responses[pos:pos + SQL_WRITING_INTERVAL]))
-
-                current_query_id += 1
 
         log.info(f"Creation of relational index {self.__backend_name} completed.")
