@@ -202,26 +202,10 @@ class RiondatoCount(Countv2):
     def _calculate_interval(self, c_ks: int, n: int, m: int = 1) -> Tuple[float, float]:
         if m == 1:
             d = 2
-            n_r = 1000
-            target_epsilon = 0.05
         else:
             d = 31
-            n_r = 6800
-            target_epsilon = 0.005
 
-        if d - 2 * target_epsilon ** 2 * n > 0:
-            delta = math.exp(d - 2 * target_epsilon ** 2 * n)
-        else:
-            delta = math.exp(d - 2 * target_epsilon ** 2 * n_r)  # TODO: this should not occur
-
-        if delta == 0:
-            log.warning(f"delta 0 at {self._delta, n, m}")
-            epsilon = 0
-        else:
-            epsilon = math.sqrt(1 / (2 * n) * (d + math.log(1 / delta)))
-
-        if self._delta == 1:
-            epsilon = 0
+        epsilon = (d + 0.051293) / (2 * n)
 
         lbk = c_ks / n - epsilon
         ubk = c_ks / n + epsilon
@@ -286,10 +270,8 @@ class RiondatoCount(Countv2):
 
         return uncovered
 
-
 class AddRiondatoCount(RiondatoCount):
     """Uses additional observations about relational databases"""
-
     def __init__(self, known: RelationalDatabase):
         super(AddRiondatoCount, self).__init__(known)
         self._additional_methods = True
