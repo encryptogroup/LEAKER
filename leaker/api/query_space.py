@@ -22,7 +22,6 @@ class QuerySpace(ABC, Collection):
     """
     A query space can be used to select a query sequence of arbitrary length (up to the size of the query space).
 
-    The query space is populated with keywords of a certain selectivity and their frequencies.
     It can be used to select multiple instances of queries.
     """
 
@@ -167,6 +166,12 @@ class KeywordQuerySpace(QuerySpace):
 
     def __contains__(self, keyword: object) -> bool:
         return any([keyword in dict(space) for space in self.__space])
+
+    @classmethod
+    def is_multi_user(cls) -> bool:
+        """Return True if multiple users are considered, False if a single user or queries aggregated from all users
+        are considered."""
+        return False
 
     @classmethod
     @abstractmethod

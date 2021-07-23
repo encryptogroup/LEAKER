@@ -64,6 +64,12 @@ class PartialUserQueryLogSpace(KeywordQuerySpace):
     relevant dataset are discarded"""
 
     @classmethod
+    def is_multi_user(cls) -> bool:
+        """Return True because multiple users are considered individually"""
+        return True
+
+
+    @classmethod
     def _candidates(cls, full: Dataset, known: Dataset, query_log: KeywordQueryLog) -> Iterator[Set[Tuple[str, int]]]:
         for user_id in query_log.user_ids():
             yield set([item for item in Counter(query_log.keywords_list(user_id)).items()
@@ -74,6 +80,12 @@ class FullUserQueryLogSpace(KeywordQuerySpace):
     """A query space using the keywords from the query log for each user in the query log.
     Keywords are weighted according to their frequency in the query log of the user. Queries that do not appear in the
     relevant dataset are discarded"""
+
+    @classmethod
+    def is_multi_user(cls) -> bool:
+        """Return True because multiple users are considered individually"""
+        return True
+
 
     @classmethod
     def _candidates(cls, full: Dataset, known: Dataset, query_log: KeywordQueryLog) -> Iterator[Set[Tuple[str, int]]]:

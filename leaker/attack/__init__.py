@@ -7,6 +7,7 @@ from .subgraph import SubgraphID, SubgraphVL
 from .vol_an import VolAn
 from .count import BasicCount, Countv2, RiondatoCount, AddRiondatoCount
 from .ikk import Ikk
+from .ikk_optimized import Ikkoptimized
 from .arr import Arr, Arrorder
 from .apa import Apa
 from .kkno import GeneralizedKKNO
@@ -31,6 +32,8 @@ __all__ = [
     'BasicCount', 'Countv2', 'RiondatoCount', 'AddRiondatoCount',  # count.py
 
     'Ikk',  # ikk.py
+
+    'Ikkoptimized',  # ikk_optimized
 
     'Arr', 'Arrorder',  # arr.py
 
