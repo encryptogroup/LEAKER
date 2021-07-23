@@ -134,6 +134,13 @@ class SQLRelationalDatabase(RelationalDatabase):
                     stmt += f" ORDER BY selectivity DESC"
                 elif sel == Selectivity.Low:
                     stmt += f" ORDER BY selectivity ASC"
+                elif sel == Selectivity.PseudoLow:
+                    lb = int(round(0.015 * len(self)))
+                    ub = int(round(0.02 * len(self)))
+                    if table is not None:
+                        stmt += f" AND selectivity BETWEEN {lb} AND {ub}"
+                    else:
+                        stmt += f" WHERE selectivity BETWEEN {lb} AND {ub}"
 
             if max_queries is not None:
                 stmt += f" LIMIT {max_queries}"
