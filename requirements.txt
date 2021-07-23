@@ -45,3 +45,6 @@ setuptools~=51.1.0
 
 # Parsing SQL queries
 sqlparse
+
+# IKK
+pandas
