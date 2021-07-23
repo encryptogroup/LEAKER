@@ -298,7 +298,7 @@ class SampledSQLRelationalDatabase(SQLRelationalDatabase):
                     self.__parent.extend_with(IdentityExtension)
                 identity = self.__parent.get_extension(IdentityExtension)
                 self._queries = [q for q in self.__parent.queries()
-                                 if len(set(identity.doc_ids(q)).intersection(self._table_row_ids[q.table])) > 0]
+                                 if any(row_id in self._table_row_ids[q.table] for row_id in identity.doc_ids(q))]
 
                 self._set_extensions(map(lambda ext: ext.sample(self), parent._get_extensions()))
         else:
@@ -306,7 +306,7 @@ class SampledSQLRelationalDatabase(SQLRelationalDatabase):
                 self.__parent.extend_with(IdentityExtension)
             identity = self.__parent.get_extension(IdentityExtension)
             self._queries = [q for q in self.__parent.queries()
-                             if len(set(identity.doc_ids(q)).intersection(self._table_row_ids[q.table])) > 0]
+                             if any(row_id in self._table_row_ids[q.table] for row_id in identity.doc_ids(q))]
 
             self._set_extensions(map(lambda ext: ext.sample(self), parent._get_extensions()))
 
