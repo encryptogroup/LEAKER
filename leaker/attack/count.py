@@ -287,27 +287,11 @@ class RiondatoCount(EstimatorCount):
         if m == 1:
             c_ks = self._known_response_length(x)
             d = 2
-            n_r = 1000
-            target_epsilon = 0.05
         else:
             c_ks = self._known_coocc.co_occurrence(x, x2)
             d = 31
-            n_r = 6800
-            target_epsilon = 0.005
 
-        if d - 2 * target_epsilon ** 2 * n > 0:
-            delta = math.exp(d - 2 * target_epsilon ** 2 * n)
-        else:
-            delta = math.exp(d - 2 * target_epsilon ** 2 * n_r)  # TODO: this should not occur
-
-        if delta == 0:
-            log.warning(f"delta 0 at {self._delta, n, m}")
-            epsilon = 0
-        else:
-            epsilon = math.sqrt(1 / (2 * n) * (d + math.log(1 / delta)))
-
-        if self._delta == 1:
-            epsilon = 0
+        epsilon = math.sqrt(0.5*d + 0.0256466) / math.sqrt(n)
 
         lbk = c_ks / n - epsilon
         ubk = c_ks / n + epsilon

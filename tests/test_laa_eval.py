@@ -102,12 +102,11 @@ def test_keyword_attack():
     query_space = PartialQuerySpace
     space_size = 500
     query_size = 150
-    sel = Selectivity.Independent
+    sel = Selectivity.High
 
     def verif_cb(series_id: str, kdr: float, rr: float, n: int) -> None:
-        golden_dict = {0.25: 0.001, 0.5: 0.01, 0.75: 0.025, 1: 0.05}
+        golden_dict = {0.25: 0.01, 0.5: 0.1, 0.75: 0.2, 1: 0.5}
         if series_id != "Countv2":
-            print(f"Got series_id {series_id}, kdr {kdr}, rr {rr}")
             assert (rr >= golden_dict[kdr])
 
     verifier = EvaluatorTestSink(verif_cb)

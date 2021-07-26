@@ -11,7 +11,7 @@ import numpy as np
 
 from leaker.api import Dataset, Selectivity
 from leaker.attack import PartialUserQueryLogSpace, FullUserQueryLogSpace, Ikk, Countv2, VolAn, SelVolAn, SubgraphID, \
-    SubgraphVL
+    SubgraphVL, Ikkoptimized, PartialQueryLogSpace, FullQueryLogSpace
 from leaker.evaluation import KeywordAttackEvaluator, EvaluationCase, DatasetSampler, QuerySelector
 from leaker.plotting import KeywordMatPlotLibSink
 from leaker.whoosh_interface import WhooshBackend
@@ -32,7 +32,6 @@ log = logging.getLogger(__name__)
 backend = WhooshBackend()
 file_description = "eval"
 
-qsp = PartialUserQueryLogSpace  # set to FullUserQueryLogSpace for evaluation of full sampling setting
 allow_repetition = False  # set to True for evaluation with repeating queries
 
 for ql_str, db_str in [("aol", "wikipedia"), ("tair_ql", "tair_db")]:
@@ -75,9 +74,16 @@ for ql_str, db_str in [("aol", "wikipedia"), ("tair_ql", "tair_db")]:
             f"Lowest and max mean selectivity are {(np.min(sls[np.nonzero(sls)]), np.max(sls))}."
             f"Lowest and max selectivity are {(np.min(sels[np.nonzero(sels)]), np.max(sels))}.")
 
+        if setting == "all":
+            qsp = PartialQueryLogSpace  # set to FullQueryLogSpace for evaluation of full sampling setting
+        else:
+            qsp = PartialUserQueryLogSpace  # set to FullUserQueryLogSpace for evaluation of full sampling setting
+
         # Evaluate attacks
         for sel, sel_str in [(Selectivity.Low, "low"), (Selectivity.High, "high")]:
-            eval = KeywordAttackEvaluator(evaluation_case=EvaluationCase(attacks=[Ikk, Countv2, VolAn, SelVolAn,
+            eval = KeywordAttackEvaluator(evaluation_case=EvaluationCase(attacks=[Ikk, Ikkoptimized.definition(
+                                                                                    deterministic=True),
+                                                                                  Countv2, VolAn, SelVolAn,
                                                                                   SubgraphID.definition(epsilon=13),
                                                                                   SubgraphVL.definition(epsilon=7)],
                                                                          dataset=db, runs=5),
