@@ -10,8 +10,8 @@ from multiprocessing.pool import Pool
 from typing import List, Iterable, Union, Type, Dict, Optional, Iterator, Tuple, TypeVar
 
 from .errors import Error, MAError
-from ..api import AttackDefinition, Dataset, QuerySpace, Selectivity, Attack, RangeDatabase, Extension, \
-    KeywordQueryLog, RelationalDatabase
+from ..api import AttackDefinition, Dataset, QuerySpace, KeywordQuerySpace, Selectivity, Attack, RangeDatabase,\
+    Extension, KeywordQueryLog, RelationalDatabase
 
 log = getLogger(__name__)
 
@@ -253,7 +253,7 @@ class QuerySelector:
         if queries can appear multiple times
         default: False
     """
-    __query_space: Type[QuerySpace]
+    __query_space: Type[KeywordQuerySpace]
     __query_space_size: int
     __query_log: KeywordQueryLog
 
@@ -264,9 +264,9 @@ class QuerySelector:
 
     __allow_repetition: bool
 
-    def __init__(self, query_space: Type[QuerySpace], query_log: KeywordQueryLog = None,
-                 selectivity: Selectivity = Selectivity.High,
-                 query_space_size: int = 500, queries: int = 150, allow_repetition: bool = False):
+    def __init__(self, query_space: Type[KeywordQuerySpace], query_log: KeywordQueryLog = None,
+                 selectivity: Selectivity = Selectivity.High, query_space_size: int = 500, queries: int = 150,
+                 allow_repetition: bool = False):
         self.__query_space = query_space
         self.__query_log = query_log
         self.__query_space_size = query_space_size
@@ -282,7 +282,7 @@ class QuerySelector:
         """
         Shows how many users' queries are included in the query spaces.
         """
-        if self.__query_log is None:
+        if self.__query_log is None or not self.__query_space.is_multi_user():
             return 1
         else:
             return len(self.__query_log.user_ids())

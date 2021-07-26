@@ -53,3 +53,6 @@ this data source (necessary only once) and load it with LEAKER to perform evalua
 #### Acknowledgements
 
 This framework has been developed by Abdelkarim Kati, Johannes Leupold, Tobias Stöckert, Amos Treiber, and Michael Yonli.
+
+The framework also uses [code by Ruben Groot Roessink](https://github.com/rubengrootroessink/IKK-query-recovery-attack) for its IKK attack optimization, which is located in the folder `ikk_roessink` and released under the
+license `ikk_roessink/LICENSE.MD`.
