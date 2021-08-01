@@ -34,7 +34,7 @@ for db_str in ["mimic_t4", "mimic_protein_creatine", "mimic_cea", "salaries", "s
 
     db = backend.load_range_database(db_str)
     log.info(f"Created range db {db.name()} of {len(db)} entries with density {db.get_density()}, min,max "
-              f"{(db.get_original_min(), db.get_original_max())}, new max {db.get_max()}.")
+             f"{(db.get_original_min(), db.get_original_max())}, new max {db.get_max()}.")
 
     # Data distribution statistics
     stat = Statistics(StatisticsCase([SelectivityDistribution()], dataset=db))
@@ -72,7 +72,7 @@ for db_str in ["mimic_t4", "mimic_protein_creatine", "mimic_cea", "salaries", "s
 
             # Evaluate count reconstruction attacks
             eval = RangeAttackEvaluator(EvaluationCase([GLMP18, GJWbasic.definition(bound=bound),
-                                                        GJWmissing.definition(bound=bound, k=bound-2)], db, num,
+                                                        GJWmissing.definition(bound=bound, k=bound - 2)], db, num,
                                                        error=CountAError),
                                         range_queries=qsp, query_counts=[100, 500, 1000, 5000, 10000, 100000],
                                         sinks=RangeMatPlotLibSink(out_file=f"{db.name()}_{qsp_str}_count_rec.png"),
