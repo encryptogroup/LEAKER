@@ -22,7 +22,7 @@ jobs:
         python-version: 3.9
     - name: Install dependencies
       run: |
-        sudo apt-get install libpython3.9
+        sudo apt-get install libpython3.9-dev python3.9-dev
         python -m pip install --upgrade pip
         pip install flake8 pytest
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
