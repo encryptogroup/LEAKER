@@ -25,6 +25,8 @@ To install LEAKER on your system, run:
 
     pip install -e .
 
+Generating the documentation will require pdoc.
+
 ---
 
 #### Structure
@@ -44,6 +46,8 @@ instructions given to the participants that evaluated attacks on their private G
 Refer to `examples.py` to see how to use LEAKER.
 First, you need to download/extract the raw data into a corresponding subdirectory of `data_sources`. Then, you can index
 this data source (necessary only once) and load it with LEAKER to perform evaluations. 
+
+To generate the documentation: enter `pdoc --html leaker` with LEAKER/ as the current working directory.
 
 ---
 
