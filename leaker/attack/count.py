@@ -205,7 +205,7 @@ class RiondatoCount(Countv2):
         else:
             d = 31
 
-        epsilon = math.sqrt(0.5*d + 0.0256466) / math.sqrt(n)
+        epsilon = math.sqrt((d + math.log(5) + 2*math.log(2))/n) / math.sqrt(2)
 
         lbk = c_ks / n - epsilon
         ubk = c_ks / n + epsilon
