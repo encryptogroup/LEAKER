@@ -22,6 +22,8 @@ class SQLBackend(Backend):
             return ret == 0
 
     def load(self, name: str) -> SQLRelationalDatabase:
+        if not self.has(name):
+            raise FileNotFoundError('Index not found: ' + name)
         return SQLRelationalDatabase(name)
 
     def data_sets(self) -> Set[str]:
