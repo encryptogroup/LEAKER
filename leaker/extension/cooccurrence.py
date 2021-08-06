@@ -87,7 +87,7 @@ class CoOccurrenceExtension(SelectivityExtension):
             else:
                 log.info(f"Creating CoOccurrence Cache for '{dataset.name()}'. This might take a while.")
                 self.__is_sampled = False
-                max_elements = len(dataset.keywords())
+                max_elements = 0
                 if not dataset.is_open():
                     with dataset:
                         self.__coocc_cache = \
@@ -138,7 +138,10 @@ class CoOccurrenceExtension(SelectivityExtension):
             log.info(f"CoOccurrence Cache for '{dataset.name()}' loaded")
 
     def sample(self, dataset: Dataset) -> 'CoOccurrenceExtension':
-        return CoOccurrenceExtension(dataset, dataset.doc_ids(), dataset.keywords(), self._identity_cache,
+        if isinstance(dataset, RelationalDatabase):
+            return CoOccurrenceExtension(dataset, original_doc_id_dict=self.__doc_id_dict)
+        else:
+            return CoOccurrenceExtension(dataset, dataset.doc_ids(), dataset.keywords(), self._identity_cache,
                                      self.__coocc_cache, original_doc_id_dict=self.__doc_id_dict)
 
     def co_occurrence(self, key0: Keyword, key1: Keyword) -> int:

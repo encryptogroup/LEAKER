@@ -90,7 +90,10 @@ class IdentityExtension(Extension, ABC):
             log.info(f"Loading Cache for '{dataset.name()}' complete")
 
     def sample(self, dataset: Union[Dataset, RelationalDatabase]) -> 'IdentityExtension':
-        return IdentityExtension(dataset, dataset.doc_ids(), dataset.keywords(), self._identity_cache)
+        if isinstance(dataset, RelationalDatabase):
+            return IdentityExtension(dataset)  # building a new extension is cheaper than sampling it.
+        else:
+            return IdentityExtension(dataset, dataset.doc_ids(), dataset.keywords(), self._identity_cache)
 
     def get_identity_cache(self) -> Cache[Keyword, Set[Identifier]]:
         return self._identity_cache

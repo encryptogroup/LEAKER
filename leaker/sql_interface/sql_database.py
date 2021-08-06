@@ -41,9 +41,8 @@ class SQLRelationalDatabase(RelationalDatabase):
 
     _is_sampled_or_restricted: bool
 
-    _row_ids: Union[None, Set[Tuple[int, int]]]
     _table_row_ids: Dict[int, Set[Tuple[int, int]]]
-    _queries: Union[None, List[RelationalQuery]]
+    _queries: Union[None, Dict[Tuple[int, int], List[RelationalQuery]]]  # maps row_id to queries returning it
     _tables: Set[int]
     _tables_ids: Dict[str, int]
 
@@ -56,8 +55,7 @@ class SQLRelationalDatabase(RelationalDatabase):
         self.__backend_name = f"{MYSQL_IDENTIFIER}_{name}"
 
         self._sql_connection = SQLConnection()
-        self._row_ids = None
-        self._queries = None
+        self._queries = dict()
 
         self._tables_ids = dict()
         self._table_row_ids = dict()
@@ -122,7 +120,7 @@ class SQLRelationalDatabase(RelationalDatabase):
         """Yields all possible queries in this data instance (possibly restricted to max_queries queries, a table and
         attribute or a selectivity. If attr is set, table needs to be set as well."""
         no_restrictions = max_queries is None and table is None and attr is None and sel is None
-        if self._queries is None or not no_restrictions:
+        if len(self._queries) == 0 or not no_restrictions:
             stmt = f"SELECT query_id, table_id, attr_id, val FROM queries"
             if table is not None:
                 stmt += f" WHERE table_id = {table}"
@@ -151,11 +149,9 @@ class SQLRelationalDatabase(RelationalDatabase):
             if res is not None:
                 for query_id, table_id, attr_id, val in res:
                     queries.append(RelationalQuery(query_id, table_id, attr_id, val))
-            if no_restrictions:
-                self._queries = queries
             return queries
         else:
-            return self._queries
+            return list(set(q for queries in self._queries.values() for q in queries))
 
     def tables(self) -> Iterator[str]:
         """
@@ -178,14 +174,23 @@ class SQLRelationalDatabase(RelationalDatabase):
         table_id"""
         if table_id is not None:
             return self._table_row_ids[table_id]
-        if self._row_ids is None:
-            ret, res = self._sql_connection.execute_query(f"SELECT table_id, row_id FROM queries_responses",
+        if len(self._queries) == 0:
+            ret, res = self._sql_connection.execute_query(f"SELECT queries.table_id, queries.query_id, attr_id, val, "
+                                                          f"row_id "
+                                                          f"FROM queries_responses "
+                                                          f"INNER JOIN queries on "
+                                                          f"queries.query_id = queries_responses.query_id",
                                                           select=True)
             if res is not None:
-                self._row_ids = set(res)
+                for table_id, query_id, attr_id, val, row_id in res:
+                    query = RelationalQuery(query_id, table_id, attr_id, val)
+                    if (table_id, row_id) not in self._queries:
+                        self._queries[(table_id, row_id)] = [query]
+                    else:
+                        self._queries[(table_id, row_id)].append(query)
             else:
                 return set()
-        return self._row_ids
+        return set(self._queries.keys())
 
     def name(self) -> str:
         return self.__name
@@ -286,29 +291,15 @@ class SampledSQLRelationalDatabase(SQLRelationalDatabase):
         log.info(f"Sampling SQL Index '{parent.name()}' at rate {rate:.3f}")
 
         self.__parent = parent
+        self.__rate = rate
 
         super(SampledSQLRelationalDatabase, self).__init__(parent.name(), is_sampled_or_restricted=True)
-
-        self._row_ids = set(row_id for row_ids in table_row_ids.values() for row_id in row_ids)
+        row_ids = set(row_id for row_ids in table_row_ids.values() for row_id in row_ids)
+        self._queries = {row: queries for row, queries in self._queries.items() if row in row_ids}
         self._table_row_ids = table_row_ids
-        self.__rate = rate
-        if not self.__parent.is_open():
-            with self.__parent:
-                if not self.__parent.has_extension(IdentityExtension):
-                    self.__parent.extend_with(IdentityExtension)
-                identity = self.__parent.get_extension(IdentityExtension)
-                self._queries = [q for q in self.__parent.queries()
-                                 if any(row_id in self._table_row_ids[q.table] for row_id in identity.doc_ids(q))]
 
-                self._set_extensions(map(lambda ext: ext.sample(self), parent._get_extensions()))
-        else:
-            if not self.__parent.has_extension(IdentityExtension):
-                self.__parent.extend_with(IdentityExtension)
-            identity = self.__parent.get_extension(IdentityExtension)
-            self._queries = [q for q in self.__parent.queries()
-                             if any(row_id in self._table_row_ids[q.table] for row_id in identity.doc_ids(q))]
-
-            self._set_extensions(map(lambda ext: ext.sample(self), parent._get_extensions()))
+        log.info(f"Sampling extensions for '{self.name()}'.")
+        self._set_extensions(map(lambda ext: ext.sample(self), parent._get_extensions()))
 
         log.info(f"Sampling SQL Index '{self.name()}' complete")
 
@@ -387,9 +378,7 @@ class SampledSQLRelationalDatabase(SQLRelationalDatabase):
                 yield from self.get_extension(IdentityExtension).doc_ids(query)
 
         if not use_ext:
-            for row_id in self.__parent.query(query):
-                if row_id in self._table_row_ids[query.table]:
-                    yield row_id
+            yield from set(self.__parent.query(query)).intersection(self._table_row_ids[query.table])
 
     def selectivity(self,  query: RelationalQuery) -> int:
         if self.has_extension(SelectivityExtension):
