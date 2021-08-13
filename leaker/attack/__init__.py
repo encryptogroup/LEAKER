@@ -16,7 +16,7 @@ from .glmp19 import ApproxValue, ApproxOrder
 from .glmp18 import GLMP18
 from .dummy import RangeBaselineAttack, RangeCountBaselineAttack
 from .gjw import GJWbasic, GJWspurious, GJWmissing, GJWpartial
-from .scoring import ScoringAttack
+from .scoring import ScoringAttack, RefinedScoringAttack
 
 __all__ = [
     'FullQuerySpace', 'PartialQuerySpace', 'FullQueryLogSpace', 'PartialQueryLogSpace', 'FullUserQueryLogSpace',
@@ -52,5 +52,5 @@ __all__ = [
 
     'GJWbasic', 'GJWspurious',  'GJWmissing', 'GJWpartial',  # gjw.py
 
-    'ScoringAttack',  #scoring.py
+    'ScoringAttack', 'RefinedScoringAttack',  # scoring.py
 ]
