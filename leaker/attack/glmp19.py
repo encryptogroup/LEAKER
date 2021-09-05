@@ -21,7 +21,7 @@ from pathlib import Path
 path = Path(__file__).resolve().parents[1]  # here path.parents[1]` is the same as `path.parent.parent
 sys.path.insert(1, str(path) + '/pq-trees/build')
 
-from pqtree_cpp import PQTree, PQNode, PQNodeArray, PQNodeDict
+from pqtree_cpp import PQTree, PQNode, PQNodeArray, PQNodeDict  # pylint: disable=import-error
 
 log = getLogger(__name__)
 
