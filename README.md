@@ -1,12 +1,12 @@
 ## LEAKER
 ### A framework for LEakage AttacK Evaluation on Real-world data
 
-###### This framework allows for an easy evaluation of leakage attacks against encrypted search. See our paper (to appear) for more details
+###### This framework allows for an easy evaluation of leakage attacks against encrypted search.
 
 ---
 
 #### Requirements
-The framework has been written in Python 3.8. To install all requirements, you can use the `requirments.txt` file:
+The framework has been written in Python 3.8. To install all requirements, you can use the `requirements.txt` file:
 
     pip install -r requirements.txt
     
