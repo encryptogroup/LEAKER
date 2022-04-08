@@ -9,7 +9,7 @@ import sys
 
 from leaker.api import Selectivity
 from leaker.attack import SubgraphVL, VolAn, SelVolAn, SubgraphID, Countv2, FullQuerySpace, FullQueryLogSpace
-from leaker.evaluation import KeywordAttackEvaluator, EvaluationCase, DatasetSampler, QuerySelector
+from leaker.evaluation import KeywordAttackEvaluator, EvaluationCase, KnownDatasetSampler, QuerySelector
 from leaker.plotting import KeywordMatPlotLibSink
 from leaker.whoosh_interface import WhooshBackend
 
@@ -87,7 +87,7 @@ for data in ["gmail", "drive"]:
         for sel, sel_str in eval_selectivities:
             eva = KeywordAttackEvaluator(evaluation_case=EvaluationCase(attacks=attacks,
                                                                         dataset=db, runs=runs),
-                                         dataset_sampler=DatasetSampler(kdr_samples=samples, reuse=reuse,
+                                         dataset_sampler=KnownDatasetSampler(kdr_samples=samples, reuse=reuse,
                                                                         monotonic=False),
                                          query_selector=QuerySelector(query_space=qsp, query_log=q_log,
                                                                       selectivity=sel,

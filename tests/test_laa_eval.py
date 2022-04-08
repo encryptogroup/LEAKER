@@ -22,7 +22,7 @@ from leaker.attack.kkno import GeneralizedKKNO
 from leaker.attack.query_space import MissingBoundedRangeQuerySpace, ShortRangeQuerySpace, \
     ValueCenteredRangeQuerySpace, PermutedBetaRangeQuerySpace, PartialQuerySpace, UniformRangeQuerySpace, \
     BoundedRangeQuerySpace
-from leaker.evaluation import KeywordAttackEvaluator, RangeAttackEvaluator, EvaluationCase, DatasetSampler, \
+from leaker.evaluation import KeywordAttackEvaluator, RangeAttackEvaluator, EvaluationCase, KnownDatasetSampler, \
     QuerySelector
 from leaker.evaluation.errors import MAError, MaxASymError, MaxABucketError, CountSError, CountAError, \
     CountPartialVolume, MSError, SetCountAError, OrderedMAError
@@ -115,7 +115,7 @@ def test_keyword_attack():
                                                                          SubgraphID.definition(epsilon=13),
                                                                          SubgraphVL.definition(epsilon=7), Countv2],
                                                                 dataset=random_words, runs=1),
-                                 dataset_sampler=DatasetSampler(kdr_samples=[0.25, 0.5, 0.75, 1.0], reuse=True,
+                                 dataset_sampler=KnownDatasetSampler(kdr_samples=[0.25, 0.5, 0.75, 1.0], reuse=True,
                                                                 monotonic=False),
                                  query_selector=QuerySelector(query_space=query_space,
                                                               selectivity=sel,

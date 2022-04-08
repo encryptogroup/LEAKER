@@ -12,7 +12,7 @@ from typing import List, Iterable, Tuple
 from leaker.api import InputDocument, Dataset, Selectivity, RandomRangeDatabase, RangeAttack, LeakagePattern, \
     RangeDatabase
 from leaker.attack import Countv2, PartialQuerySpace, GeneralizedKKNO, UniformRangeQuerySpace
-from leaker.evaluation import DatasetSampler, EvaluationCase, QuerySelector, KeywordAttackEvaluator, MAError, \
+from leaker.evaluation import KnownDatasetSampler, SampledDatasetSampler, EvaluationCase, QuerySelector, KeywordAttackEvaluator, MAError, \
     RangeAttackEvaluator
 from leaker.plotting import KeywordMatPlotLibSink, RangeMatPlotLibSink
 from leaker.preprocessing import Filter, Sink, Preprocessor
@@ -95,7 +95,7 @@ evaluation_case = EvaluationCase(attacks=attacks, dataset=enron_db_restricted, r
 kdr = [.5, .6, .75, .85, .95]  # known data rates
 reuse = True  # If we reuse sampled datasets a number of times (=> we will have a 5x5 evaluation here)
 # From this, we can construct a DatasetSampler:
-dataset_sampler = DatasetSampler(kdr_samples=kdr, reuse=reuse)
+dataset_sampler = KnownDatasetSampler(kdr_samples=kdr, reuse=reuse)
 
 query_space = PartialQuerySpace  # The query space to populate. Here, we use partial sampling from
 # the data collection. With a query log, a QueryLogSpace is used.

@@ -7,7 +7,7 @@ Authors: Johannes Leupold
 import os
 from abc import ABC, abstractmethod
 from logging import getLogger
-from typing import Iterator, Set, TypeVar, Type, Dict, List, Iterable, Optional, Union
+from typing import Iterator, Set, TypeVar, Type, Dict, List, Iterable, Optional, Union, Tuple
 
 from .constants import PICKLE_DIRECTORY, Selectivity
 from .document import Document
@@ -269,6 +269,20 @@ class Dataset(Data):
         on a sampled data set, the sampled fraction returned should be calculated with respect to the size of the
         full data set. This method is used to sample base data sets to known data rates to simulate partial knowledge of
         the full data set.
+
+        Parameters
+        ----------
+        rate : float
+            the sample rate in [0, 1]
+        """
+        raise NotImplementedError
+    
+    @abstractmethod
+    def sample_test_training(self, rate: float) -> Tuple['Dataset','Dataset']:
+        """
+        Samples this data set to the given percentage. The rate must be in [0.1, 0.9]. Other values must be rejected by
+        this method. This method is used to generate disjunct test and training data sets from a base data sets to a given rate
+        to simulate knowledge of a statisitcally close dataset.
 
         Parameters
         ----------

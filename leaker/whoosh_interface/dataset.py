@@ -149,6 +149,17 @@ class WhooshDataset(Dataset):
         sample_size = ceil(len(self._doc_ids) * rate)
 
         return SampledWhooshDataset(self, rate, doc_ids=set(sample(population=self._doc_ids, k=sample_size)))
+    
+    def sample_test_training(self, rate: float) -> Dataset:
+        if rate > 0.9 or rate < 0.1:
+            raise ValueError("Sample rate must be in [0.1, 0.9]")
+
+        sample_size = ceil(len(self._doc_ids) * rate)
+
+        training_ids = set(sample(population=self._doc_ids, k=sample_size))
+        test_ids = set(self._doc_ids).difference(training_ids)
+
+        return (SampledWhooshDataset(self, rate, doc_ids=training_ids), SampledWhooshDataset(self, 1-rate, doc_ids=test_ids))
 
     def sample_rate(self) -> float:
         return 1.
