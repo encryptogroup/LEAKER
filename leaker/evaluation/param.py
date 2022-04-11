@@ -269,22 +269,29 @@ class SampledDatasetSampler(DatasetSampler):
         default: False
     """
     __kdr_samples: Iterable[float]
+    __training_set: Dataset = None
 
-    def __init__(self, kdr_samples: Iterable[float], reuse: bool = False, monotonic: bool = False):
+    def __init__(self, kdr_samples: Iterable[float] = [0], reuse: bool = False, monotonic: bool = False, training_set: Dataset = None):
         super().__init__(kdr_samples,reuse,monotonic)
         self.__kdr_samples = kdr_samples
+        if training_set:
+            self.__training_set = training_set
 
         
     def create_samples(self, dataset: Dataset, pool: Optional[Pool]) -> Iterator[Tuple[float, Dataset]]:
-        sorted_samples = sorted(self.__kdr_samples, reverse=True)
-
-        if pool is None:
-            for kdr in sorted_samples:
-                sampled = dataset.sample_test_training(kdr)
-                yield kdr, sampled
+        if self.__training_set:
+            sampled = (self.__training_set, dataset)
+            yield 0, sampled
         else:
-            yield from iter(pool.starmap(func=lambda rate: (rate, dataset.sample_test_training(rate)),
-                                         iterable=map(lambda rate: (rate,), sorted_samples)))
+            sorted_samples = sorted(self.__kdr_samples, reverse=True)
+
+            if pool is None:
+                for kdr in sorted_samples:
+                    sampled = dataset.sample_test_training(kdr)
+                    yield kdr, sampled
+            else:
+                yield from iter(pool.starmap(func=lambda rate: (rate, dataset.sample_test_training(rate)),
+                                            iterable=map(lambda rate: (rate,), sorted_samples)))
 
 
 class QuerySelector:

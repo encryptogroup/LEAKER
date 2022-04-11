@@ -11,7 +11,7 @@ from multiprocessing.pool import ThreadPool, Pool
 from typing import List, Union, Iterable, Tuple, Iterator, Optional, Type
 
 from .errors import Error
-from .param import EvaluationCase, KnownDatasetSampler, QuerySelector
+from .param import EvaluationCase, KnownDatasetSampler, QuerySelector, SampledDatasetSampler
 from ..api import Attack, RangeAttack, KeywordAttack, Dataset, DataSink, RangeQuerySpace, RangeDatabase
 from ..util.time import Stopwatch
 
@@ -57,10 +57,10 @@ class KeywordAttackEvaluator(Evaluator):
         the number of parallel threads to use in the evaluation
         default: 1
     """
-    __dataset_sampler: KnownDatasetSampler
+    __dataset_sampler: Union[KnownDatasetSampler,SampledDatasetSampler]
     __query_selector: QuerySelector
 
-    def __init__(self, evaluation_case: EvaluationCase, dataset_sampler: KnownDatasetSampler, query_selector: QuerySelector,
+    def __init__(self, evaluation_case: EvaluationCase, dataset_sampler: Union[KnownDatasetSampler,SampledDatasetSampler], query_selector: QuerySelector,
                  sinks: Union[DataSink, Iterable[DataSink]], parallelism: int = 1):
         super().__init__(evaluation_case, sinks, parallelism)
         self.__dataset_sampler = dataset_sampler
