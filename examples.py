@@ -11,7 +11,7 @@ from typing import List, Iterable, Tuple
 
 from leaker.api import InputDocument, Dataset, Selectivity, RandomRangeDatabase, RangeAttack, LeakagePattern, \
     RangeDatabase
-from leaker.attack import Countv2, PartialQuerySpace, GeneralizedKKNO, UniformRangeQuerySpace
+from leaker.attack import Countv2, Sap, PartialQuerySpace, GeneralizedKKNO, UniformRangeQuerySpace
 from leaker.evaluation import KnownDatasetSampler, SampledDatasetSampler, EvaluationCase, QuerySelector, KeywordAttackEvaluator, MAError, \
     RangeAttackEvaluator
 from leaker.plotting import KeywordMatPlotLibSink, RangeMatPlotLibSink
@@ -86,16 +86,16 @@ log.info(f"{enron_db_restricted.name()} now contains {len(enron_db_restricted)} 
 
 ###### EVALUATION ######
 # We can evaluate according to many criteria:
-attacks = [Countv2]  # the attacks to evaluate
+attacks = [Sap]  # the attacks to evaluate
 runs = 5  # Amount of evaluations
 
 # From this, we can construct a simple EvaluationCase:
-evaluation_case = EvaluationCase(attacks=attacks, dataset=enron_db_restricted, runs=runs)
+evaluation_case = EvaluationCase(attacks=attacks, dataset=enron_db, runs=runs)
 
-kdr = [.5, .6, .75, .85, .95]  # known data rates
+kdr = [ .15, .25, .4, .5, .6, .75, .85]  # known data rates
 reuse = True  # If we reuse sampled datasets a number of times (=> we will have a 5x5 evaluation here)
 # From this, we can construct a DatasetSampler:
-dataset_sampler = KnownDatasetSampler(kdr_samples=kdr, reuse=reuse)
+dataset_sampler = SampledDatasetSampler(training_set=enron_db_restricted, reuse=reuse)
 
 query_space = PartialQuerySpace  # The query space to populate. Here, we use partial sampling from
 # the data collection. With a query log, a QueryLogSpace is used.
@@ -117,103 +117,103 @@ eva = KeywordAttackEvaluator(evaluation_case=evaluation_case, dataset_sampler=da
 # And then run it:
 eva.run()
 
-# ----- 2: Range Attack Evaluation -----#
-# As mentioned, pre-processing and loading range data works similarly to the keyword case.
-# Let's therefore consider a randomly generated data collection with values in 1,...,500, n=1200 and repeated values:
-example_db = RandomRangeDatabase("test_db", 1, 500, length=1200, allow_repetition=True)
+# # ----- 2: Range Attack Evaluation -----#
+# # As mentioned, pre-processing and loading range data works similarly to the keyword case.
+# # Let's therefore consider a randomly generated data collection with values in 1,...,500, n=1200 and repeated values:
+# example_db = RandomRangeDatabase("test_db", 1, 500, length=1200, allow_repetition=True)
 
-log.info(f"Created range db {example_db.name()} of {len(example_db)} entries with density {example_db.get_density()},"
-         f" N={example_db.get_max()}.")
+# log.info(f"Created range db {example_db.name()} of {len(example_db)} entries with density {example_db.get_density()},"
+#          f" N={example_db.get_max()}.")
 
-###### EVALUATION ######
-# We can evaluate according to many criteria:
-attacks = [GeneralizedKKNO]  # the attacks to evaluate
-runs = 10  # Amount of evaluations
-error = MAError  # Type of error (see leaker.evaluation.errors)
-# From this, we can construct a simple EvaluationCase:
-evaluation_case = EvaluationCase(attacks=attacks, dataset=example_db, runs=runs, error=error) #
+# ###### EVALUATION ######
+# # We can evaluate according to many criteria:
+# attacks = [GeneralizedKKNO]  # the attacks to evaluate
+# runs = 10  # Amount of evaluations
+# error = MAError  # Type of error (see leaker.evaluation.errors)
+# # From this, we can construct a simple EvaluationCase:
+# evaluation_case = EvaluationCase(attacks=attacks, dataset=example_db, runs=runs, error=error) #
 
-query_space = UniformRangeQuerySpace(example_db, 10 ** 6, allow_repetition=True, allow_empty=True) # Query distribution.
-# Here, we use the uniform query space with 10**6 queries being created initially. With a query log of real-world
-# queries, a QueryLogRangeQuerySpace is used instead (see leaker.attack.query_space for more spaces).
-query_counts = [100, 500, 1000, 10 ** 4]  # How many queries to attack, each amount being sampled from the query space.
-normalize = True  # Whether to display absolute error results or normalize them.
+# query_space = UniformRangeQuerySpace(example_db, 10 ** 6, allow_repetition=True, allow_empty=True) # Query distribution.
+# # Here, we use the uniform query space with 10**6 queries being created initially. With a query log of real-world
+# # queries, a QueryLogRangeQuerySpace is used instead (see leaker.attack.query_space for more spaces).
+# query_counts = [100, 500, 1000, 10 ** 4]  # How many queries to attack, each amount being sampled from the query space.
+# normalize = True  # Whether to display absolute error results or normalize them.
 
-out_file = "genkkno_uniform.png"  # Output file (if desired), will be stored in data/figures
+# out_file = "genkkno_uniform.png"  # Output file (if desired), will be stored in data/figures
 
-# With these parameters, we can set up the Evaluator:
-eva = RangeAttackEvaluator(evaluation_case=evaluation_case, range_queries=query_space, query_counts=query_counts,
-                           normalize=True, sinks=RangeMatPlotLibSink(out_file=out_file), parallelism=5)
-# And then run it:
-eva.run()
+# # With these parameters, we can set up the Evaluator:
+# eva = RangeAttackEvaluator(evaluation_case=evaluation_case, range_queries=query_space, query_counts=query_counts,
+#                            normalize=True, sinks=RangeMatPlotLibSink(out_file=out_file), parallelism=5)
+# # And then run it:
+# eva.run()
 
-# ----- 3: New Attack -----#
-# To implement a new attack, you just need to create a new class fulfilling the Attack interface, i.e.,
-# implementing the name(), required_leakage(), and recover(queries) methods.
-
-
-class ExampleAttack(RangeAttack):
-    """
-    Implements a baseline range attack that just outputs the min value, ignoring any leakage
-    """
-    __min_val: int
-    __n: int
-
-    def __init__(self, db: RangeDatabase):
-        super().__init__(db)
-        self.__min_val = db.get_min()
-        self.__n = len(db)
-
-    @classmethod
-    def name(cls) -> str:
-        return "Example"
-
-    @classmethod
-    def required_leakage(cls) -> List[LeakagePattern[int]]:
-        return []
-
-    def recover(self, queries: Iterable[Tuple[int, int]]) -> List[int]:
-        """Recover has to provide the adversary's goal. In this case, we want to return the database values.
-        A better attack would use leakage information obtained by calling the patterns of self.required_leakage() on
-        queries."""
-        res = [self.__min_val for _ in range(len(self.db()))]
-
-        return res
+# # ----- 3: New Attack -----#
+# # To implement a new attack, you just need to create a new class fulfilling the Attack interface, i.e.,
+# # implementing the name(), required_leakage(), and recover(queries) methods.
 
 
-# Let's test it in the previous setting:
-log.info("Testing new attack.")
-eva = RangeAttackEvaluator(evaluation_case=EvaluationCase(attacks=[ExampleAttack], dataset=example_db, runs=runs,
-                                                          error=error),
-                           range_queries=query_space, query_counts=query_counts,
-                           normalize=True, sinks=RangeMatPlotLibSink(out_file="example_attack.png"), parallelism=5)
-eva.run()
+# class ExampleAttack(RangeAttack):
+#     """
+#     Implements a baseline range attack that just outputs the min value, ignoring any leakage
+#     """
+#     __min_val: int
+#     __n: int
+
+#     def __init__(self, db: RangeDatabase):
+#         super().__init__(db)
+#         self.__min_val = db.get_min()
+#         self.__n = len(db)
+
+#     @classmethod
+#     def name(cls) -> str:
+#         return "Example"
+
+#     @classmethod
+#     def required_leakage(cls) -> List[LeakagePattern[int]]:
+#         return []
+
+#     def recover(self, queries: Iterable[Tuple[int, int]]) -> List[int]:
+#         """Recover has to provide the adversary's goal. In this case, we want to return the database values.
+#         A better attack would use leakage information obtained by calling the patterns of self.required_leakage() on
+#         queries."""
+#         res = [self.__min_val for _ in range(len(self.db()))]
+
+#         return res
 
 
-# ----- 4: New Countermeasure -----#
-# To implement a new countermeasure that uses, e.g., false positives, you just need to create a new class fulfilling the
-# Data interface, i.e., re-implementing the query() method of a keyword or range database.
-
-class ExampleCountermeasureRangeDatabase(RangeDatabase):
-    """
-    Dummy class that adds all possible responses as false positives to the query results. This is not practical and
-    just serves to show how countermasures can be incorporated into LEAKER, as this will diminish attack results.
-    """
-
-    def query(self, *query):
-        """Perform a query on (min, max) to give all possible responses to any query, ignoring the actual query."""
-        q = (self.get_min(), self.get_max())
-        return super().query(q)
+# # Let's test it in the previous setting:
+# log.info("Testing new attack.")
+# eva = RangeAttackEvaluator(evaluation_case=EvaluationCase(attacks=[ExampleAttack], dataset=example_db, runs=runs,
+#                                                           error=error),
+#                            range_queries=query_space, query_counts=query_counts,
+#                            normalize=True, sinks=RangeMatPlotLibSink(out_file="example_attack.png"), parallelism=5)
+# eva.run()
 
 
-# Build a new RangeDatabase out of the previous one:
-countermeasure_db = ExampleCountermeasureRangeDatabase("countermeasure", values=example_db.get_numerical_values())
+# # ----- 4: New Countermeasure -----#
+# # To implement a new countermeasure that uses, e.g., false positives, you just need to create a new class fulfilling the
+# # Data interface, i.e., re-implementing the query() method of a keyword or range database.
 
-# Let's test it in the previous setting and see that it diminishes accuracy:
-log.info("Testing new countermeasure.")
-eva = RangeAttackEvaluator(evaluation_case=EvaluationCase(attacks=[GeneralizedKKNO], dataset=countermeasure_db,
-                                                          runs=runs, error=error),
-                           range_queries=query_space, query_counts=query_counts,
-                           normalize=True, sinks=RangeMatPlotLibSink(out_file="example_countermeasure.png"),
-                           parallelism=5)
-eva.run()
+# class ExampleCountermeasureRangeDatabase(RangeDatabase):
+#     """
+#     Dummy class that adds all possible responses as false positives to the query results. This is not practical and
+#     just serves to show how countermasures can be incorporated into LEAKER, as this will diminish attack results.
+#     """
+
+#     def query(self, *query):
+#         """Perform a query on (min, max) to give all possible responses to any query, ignoring the actual query."""
+#         q = (self.get_min(), self.get_max())
+#         return super().query(q)
+
+
+# # Build a new RangeDatabase out of the previous one:
+# countermeasure_db = ExampleCountermeasureRangeDatabase("countermeasure", values=example_db.get_numerical_values())
+
+# # Let's test it in the previous setting and see that it diminishes accuracy:
+# log.info("Testing new countermeasure.")
+# eva = RangeAttackEvaluator(evaluation_case=EvaluationCase(attacks=[GeneralizedKKNO], dataset=countermeasure_db,
+#                                                           runs=runs, error=error),
+#                            range_queries=query_space, query_counts=query_counts,
+#                            normalize=True, sinks=RangeMatPlotLibSink(out_file="example_countermeasure.png"),
+#                            parallelism=5)
+# eva.run()
