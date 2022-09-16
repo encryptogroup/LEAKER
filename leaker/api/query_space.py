@@ -49,6 +49,7 @@ class QuerySpace(ABC, Collection):
 class KeywordQuerySpace(QuerySpace):
     __space: List[Set[Tuple[str, int]]]
     __allow_repetition: bool
+    __query_log: KeywordQueryLog
 
     def __init__(self, full: Dataset, known: Dataset, selectivity: Selectivity, size: int,
                  query_log: KeywordQueryLog = None,
@@ -72,7 +73,7 @@ class KeywordQuerySpace(QuerySpace):
             whether repetitions are allowed when drawing query sequences
         """
         self.__space: List[Set[Tuple[str, int]]] = []
-
+        self.__query_log = query_log
         for i, candidate_keywords in enumerate(self._candidates(full, known, query_log)):
             if len(candidate_keywords) < size:
                 log.warning(f"Set of candidate keywords with length {len(candidate_keywords)} at position {i} smaller "
@@ -123,7 +124,10 @@ class KeywordQuerySpace(QuerySpace):
     def _get_space(self) -> Iterator[Set[Tuple[str, int]]]:
         yield from self.__space
 
-    def select(self, n: int) -> Iterator[List[str]]:
+    def _get_log(self) -> KeywordQueryLog:
+        return self.__query_log
+
+    def select(self, n: int, *args, **kwargs) -> Iterator[List[str]]:
         """
         Selects a query sequence of the desired length.
 
@@ -188,6 +192,39 @@ class KeywordQuerySpace(QuerySpace):
             the query log of users
         """
         raise NotImplementedError
+
+
+class KeywordAuxQuerySpace(KeywordQuerySpace):
+    __space: List[Set[Tuple[str, int]]]
+    __allow_repetition: bool
+
+    def __init__(self, full: Dataset, known: Dataset, selectivity: Selectivity, size: int,
+                 aux_knowledge: dict = None,
+                 query_log: KeywordQueryLog = None,
+                 allow_repetition: bool = False):
+        if aux_knowledge is None:
+            super().__init__(full, known, selectivity, size, query_log, allow_repetition)
+        else:
+            self.__space: List[Set[Tuple[str, int]]] = []
+
+            for i, candidate_keywords in enumerate(self._candidates(full, known, query_log)):
+                if len(candidate_keywords) < size:
+                    log.warning(f"Set of candidate keywords with length {len(candidate_keywords)} at position {i} smaller "
+                                f"than configured query space size of {size}. Requested selectivity ignored.")
+                    self.__space.append(candidate_keywords)
+                    continue
+                if selectivity == Selectivity.High:
+                    self.__space.append(set(sorted(candidate_keywords, key=lambda item: full.selectivity(item[0]),
+                                                reverse=True)[:size]))
+                elif selectivity == Selectivity.Low:
+                    self.__space.append(set(sorted(candidate_keywords, key=lambda item: full.selectivity(item[0]))[:size]))
+                elif selectivity == Selectivity.PseudoLow:
+                    self.__space.append(set(sorted(filter(lambda item: 10 <= full.selectivity(item[0]), candidate_keywords),
+                                                key=lambda item: full.selectivity(item[0]))[:size]))
+                elif selectivity == Selectivity.Independent:
+                    self.__space.append(set(sample(population=candidate_keywords, k=size)))
+
+            self.__allow_repetition = allow_repetition
 
 
 class RangeQuerySpace(QuerySpace):

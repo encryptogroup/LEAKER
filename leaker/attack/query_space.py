@@ -94,6 +94,19 @@ class FullUserQueryLogSpace(KeywordQuerySpace):
                        if full.selectivity(item[0]) > 0])
 
 
+class AuxiliaryKnowledgeQuerySpace(KeywordQuerySpace):
+    @classmethod
+    def _candidates(cls, full: Dataset, known: Dataset, query_log: KeywordQueryLog) -> Iterator[Set[Tuple[str, int]]]:
+        yield set([item for item in Counter(query_log.keywords_list()).items() if full.selectivity(item[0]) > 0])
+    
+    def select(self, n: int=-1) -> Iterator[List[str]]:
+        query_log = super()._get_log()
+        if n > 0:
+            return [query_log.keywords_list()]#[query_log.keywords_list()[:n]]
+        else:
+            return [query_log.keywords_list()]
+        
+
 class UniformRangeQuerySpace(RangeQuerySpace):
     """A Range query space where queries are generated uniformly at random. If the amount parameter is set to -1,
     this simulates enough queries s.t. all possible queries are issued."""
