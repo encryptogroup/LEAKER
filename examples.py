@@ -11,7 +11,7 @@ from typing import List, Iterable, Tuple
 
 from leaker.api import InputDocument, Dataset, Selectivity, RandomRangeDatabase, RangeAttack, LeakagePattern, \
     RangeDatabase
-from leaker.attack import Countv2, Sap, PartialQuerySpace, GeneralizedKKNO, UniformRangeQuerySpace
+from leaker.attack import Countv2, Sap, PartialQuerySpace, PartialQueryLogSpace, GeneralizedKKNO, UniformRangeQuerySpace
 from leaker.evaluation import KnownDatasetSampler, SampledDatasetSampler, EvaluationCase, QuerySelector, KeywordAttackEvaluator, MAError, \
     RangeAttackEvaluator
 from leaker.plotting import KeywordMatPlotLibSink, RangeMatPlotLibSink
@@ -90,14 +90,14 @@ attacks = [Sap]  # the attacks to evaluate
 runs = 5  # Amount of evaluations
 
 # From this, we can construct a simple EvaluationCase:
-evaluation_case = EvaluationCase(attacks=attacks, dataset=enron_db, runs=runs)
+evaluation_case = EvaluationCase(attacks=attacks, dataset=enron_db_restricted, runs=runs)
 
-kdr = [ .15, .25, .4, .5, .6, .75, .85]  # known data rates
+kdr = [.5]  # known data rates
 reuse = True  # If we reuse sampled datasets a number of times (=> we will have a 5x5 evaluation here)
 # From this, we can construct a DatasetSampler:
-dataset_sampler = SampledDatasetSampler(training_set=enron_db_restricted, reuse=reuse)
+dataset_sampler = SampledDatasetSampler(kdr_samples=kdr, reuse=reuse)
 
-query_space = PartialQuerySpace  # The query space to populate. Here, we use partial sampling from
+query_space = PartialQueryLogSpace  # The query space to populate. Here, we use partial sampling from
 # the data collection. With a query log, a QueryLogSpace is used.
 sel = Selectivity.High  # When sampling queries, we use high selectivity keywords
 qsp_size = 500  # Size of the query space
@@ -107,7 +107,7 @@ allow_repetition = False  # If queries can repeat
 query_selector = QuerySelector(query_space=query_space, selectivity=sel, query_space_size=qsp_size, queries=sample_size,
                                allow_repetition=allow_repetition)
 
-out_file = "countv2_enron_sent_high_partial.png"  # Output file (if desired), will be stored in data/figures
+out_file = "sap_50-50_Sampled_Data_vol.png"  # Output file (if desired), will be stored in data/figures
 
 # With these parameters, we can set up the Evaluator:
 eva = KeywordAttackEvaluator(evaluation_case=evaluation_case, dataset_sampler=dataset_sampler,
