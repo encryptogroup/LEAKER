@@ -614,6 +614,9 @@ class WhooshKeywordQueryLog(KeywordQueryLog):
             self.__searcher.close()
             self.__searcher = None
 
+    def sample(self, sample_rate):
+        return self.__keyword_cache.sample(sample_rate)
+
     def __del__(self):
         self.__exit__(None, None, None)
 

@@ -79,6 +79,13 @@ class Cache(Generic[A, T], Mapping[A, T]):
 
         return cls(cls.__build(accessor, keys, max_elements), accessor)
 
+    @classmethod
+    def sample(cls, sample_rate):
+        split_point = int(cls.__len__()*sample_rate)
+        training_cache = {A:T for (A,T) in [elem for elem in cls.__cache.items()][:split_point]}
+        testing_cache = {A:T for (A,T) in [elem for elem in cls.__cache.items()][split_point:]}
+        return cls(training_cache,cls.__accessor), cls(testing_cache,cls.__accessor)
+
     def pickle(self, filename: str) -> None:
         """
         Stores the cache dict object

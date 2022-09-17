@@ -11,6 +11,7 @@ from typing import Iterator, Set, TypeVar, Type, Dict, List, Iterable, Optional,
 
 from .constants import PICKLE_DIRECTORY, Selectivity
 from .document import Document
+from ..cache import Cache
 
 log = getLogger(__name__)
 
@@ -461,3 +462,74 @@ class KeywordQueryLog(Data):
 
     def __call__(self, user_id: str) -> Iterator[str]:
         yield from self.keywords_list(user_id)
+
+
+class DummyKeywordQueryLogFromList(KeywordQueryLog):
+    """Simulates a log by taking a list of queries"""
+    __name: str
+    __keywords_list: List[str]
+
+    def __init__(self, name: str, list: List[str]):
+        self.__name = name
+        self.__keywords_list = list
+
+    def name(self) -> str:
+        return self.__name
+
+    def user_ids(self) -> List[str]:
+        return ["0"]
+
+    def keywords_list(self, user_id: str = None, remove_endstates: bool = False) -> List[str]:
+        # Ignores user_id and remove_endstates and instead just yield the initially supplied list.
+        return self.__keywords_list
+
+    def open(self) -> 'Dataset':
+        return self
+
+    def close(self) -> None:
+        pass
+
+    def doc_ids(self) -> Set[str]:
+        return []
+
+    def documents(self) -> Iterator[Document]:
+        pass
+
+    def is_open(self) -> bool:
+        return True
+
+    def pickle(self) -> None:
+        pass
+
+    def query(self, keyword: str) -> Union[Iterator[Document], Iterator[str]]:
+        pass
+
+
+class SampledKeywordQueryLog(KeywordQueryLog):
+
+    __name: str
+    __keyword_cache: Cache[str, List[str]]
+    __keywords_list: List[str]
+    __user_ids: List[str]
+
+    def __init__(self, name: str, keyword_cache: Cache):
+        self.__name = name
+        self.__keyword_cache = keyword_cache
+        self.__keywords_list = [kw for keywords in self.__keyword_cache.values() for kw in keywords]
+        self.__user_ids = self.__keyword_cache.keys()
+        super().__init__()
+    
+    def name(self) -> str:
+        return self.__name
+
+    def query(self, user_id: str) -> Iterator[str]:
+        yield from self.__keyword_cache[user_id]
+
+    def user_ids(self) -> List[str]:
+        return self.__user_ids
+
+    def keywords_list(self, user_id: str = None) -> List[str]:
+        if user_id is None:
+            return self.__keywords_list
+        else:
+            return list(self.query(user_id))
