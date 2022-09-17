@@ -6,10 +6,11 @@ Authors: Amos Treiber
 """
 import logging
 import sys
+import pickle as pkl
 
 from typing import List, Iterable, Tuple
 
-from leaker.api import InputDocument, Dataset, Selectivity, RandomRangeDatabase, RangeAttack, LeakagePattern, \
+from leaker.api import InputDocument, Dataset, DummyKeywordQueryLogFromList, Selectivity, RandomRangeDatabase, RangeAttack, LeakagePattern, \
     RangeDatabase
 from leaker.attack import Countv2, Sap, PartialQuerySpace, PartialQueryLogSpace, GeneralizedKKNO, UniformRangeQuerySpace
 from leaker.evaluation import KnownDatasetSampler, SampledDatasetSampler, EvaluationCase, QuerySelector, KeywordAttackEvaluator, MAError, \
@@ -96,7 +97,8 @@ kdr = [.5]  # known data rates
 reuse = True  # If we reuse sampled datasets a number of times (=> we will have a 5x5 evaluation here)
 # From this, we can construct a DatasetSampler:
 dataset_sampler = SampledDatasetSampler(kdr_samples=kdr, reuse=reuse)
-
+queries_obs_file = open("/home/user/Documents/LEAKER/LEAKER/data_sources/Google_Trends/queries_obs.pkl",'rb')
+query_log_obs = DummyKeywordQueryLogFromList("queries_obs", pkl.load(queries_obs_file))
 query_space = PartialQueryLogSpace  # The query space to populate. Here, we use partial sampling from
 # the data collection. With a query log, a QueryLogSpace is used.
 sel = Selectivity.High  # When sampling queries, we use high selectivity keywords
@@ -105,7 +107,7 @@ sample_size = 150  # Amount of queries attacked at a time (sampled from the quer
 allow_repetition = False  # If queries can repeat
 # From this, we can construct a QuerySelector:
 query_selector = QuerySelector(query_space=query_space, selectivity=sel, query_space_size=qsp_size, queries=sample_size,
-                               allow_repetition=allow_repetition)
+                               allow_repetition=allow_repetition, query_log=query_log_obs)
 
 out_file = "sap_50-50_Sampled_Data_vol.png"  # Output file (if desired), will be stored in data/figures
 
