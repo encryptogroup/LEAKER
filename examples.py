@@ -79,16 +79,20 @@ log.info(f"Loaded {enron_db.name()} data. {len(enron_db)} documents with {len(en
 
 # In [CGPR15], the collection was restricted to the most frequent 500 keywords. In this example, we do the same,
 # by restricting the size and specifying the Selectivity:
-enron_db_restricted = enron_db.restrict_keyword_size(500, Selectivity.High)
+enron_db_restricted = enron_db.restrict_keyword_size(100, Selectivity.High)
 log.info(f"{enron_db_restricted.name()} now contains {len(enron_db_restricted)} documents with "
          f"{len(enron_db_restricted.keywords())} words.")
 
 # For the range case, you can similarly use a RangeBackend.
 
 ###### EVALUATION ######
+queries_obs_file = open("/home/user/Documents/LEAKER/LEAKER/data_sources/Google_Trends/queries_obs.pkl",'rb')
+query_log_obs = DummyKeywordQueryLogFromList("queries_obs", pkl.load(queries_obs_file))
+query_space = PartialQueryLogSpace
+
 # We can evaluate according to many criteria:
-attacks = [Sap]  # the attacks to evaluate
-runs = 5  # Amount of evaluations
+attacks = [Sap.definition(known_queries=query_log_obs.keywords_list())]  # the attacks to evaluate
+runs = 1  # Amount of evaluations
 
 # From this, we can construct a simple EvaluationCase:
 evaluation_case = EvaluationCase(attacks=attacks, dataset=enron_db_restricted, runs=runs)
@@ -97,13 +101,11 @@ kdr = [.5]  # known data rates
 reuse = True  # If we reuse sampled datasets a number of times (=> we will have a 5x5 evaluation here)
 # From this, we can construct a DatasetSampler:
 dataset_sampler = SampledDatasetSampler(kdr_samples=kdr, reuse=reuse)
-queries_obs_file = open("/home/user/Documents/LEAKER/LEAKER/data_sources/Google_Trends/queries_obs.pkl",'rb')
-query_log_obs = DummyKeywordQueryLogFromList("queries_obs", pkl.load(queries_obs_file))
-query_space = PartialQueryLogSpace  # The query space to populate. Here, we use partial sampling from
+# The query space to populate. Here, we use partial sampling from
 # the data collection. With a query log, a QueryLogSpace is used.
 sel = Selectivity.High  # When sampling queries, we use high selectivity keywords
-qsp_size = 500  # Size of the query space
-sample_size = 150  # Amount of queries attacked at a time (sampled from the query space)
+qsp_size = 100  # Size of the query space
+sample_size = 100  # Amount of queries attacked at a time (sampled from the query space)
 allow_repetition = False  # If queries can repeat
 # From this, we can construct a QuerySelector:
 query_selector = QuerySelector(query_space=query_space, selectivity=sel, query_space_size=qsp_size, queries=sample_size,

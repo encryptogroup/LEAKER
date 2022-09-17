@@ -1,13 +1,13 @@
 """Some Code in this file has been adapted from https://github.com/simon-oya/USENIX21-sap-code"""
 from logging import getLogger
-from typing import Iterable, List, Any, Dict, Set, TypeVar, Type
+from typing import Iterable, List, Any, Dict, Set, TypeVar, Type, Union
 
 import numpy as np
 from scipy.optimize import linear_sum_assignment as hungarian
 
-from ..api import Extension, KeywordAttack, Dataset, LeakagePattern
+from ..api import Extension, KeywordAttack, Dataset, LeakagePattern, KeywordQueryLog
 from ..extension import VolumeExtension
-from ..pattern import ResponseLength, TotalVolume
+from ..pattern import ResponseLength, TotalVolume, Frequency
 
 log = getLogger(__name__)
 
@@ -52,8 +52,9 @@ class Sap(KeywordAttack):
     _known_response_length: Dict[str, int]
     _known_keywords: Dict
     _delta: float
+    _known_f_matrix: np.ndarray
 
-    def __init__(self, known: Dataset):
+    def __init__(self, known: Dataset, known_queries: Union[List[str],KeywordQueryLog] = None):
         super(Sap, self).__init__(known)
 
         self._delta = known.sample_rate()
@@ -73,6 +74,10 @@ class Sap(KeywordAttack):
             i += 1
             self._known_volume[keyword] = vol.total_volume(keyword)
             self._known_response_length[keyword] = vol.selectivity(keyword)
+
+        freq = Frequency()
+        self._known_f_matrix = freq(self._known(),known_queries)
+        print(self._known_f_matrix)
 
     @classmethod
     def name(cls) -> str:
