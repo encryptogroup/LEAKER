@@ -79,7 +79,7 @@ log.info(f"Loaded {enron_db.name()} data. {len(enron_db)} documents with {len(en
 
 # In [CGPR15], the collection was restricted to the most frequent 500 keywords. In this example, we do the same,
 # by restricting the size and specifying the Selectivity:
-enron_db_restricted = enron_db.restrict_keyword_size(100, Selectivity.High)
+enron_db_restricted = enron_db.restrict_keyword_size(500, Selectivity.High)
 log.info(f"{enron_db_restricted.name()} now contains {len(enron_db_restricted)} documents with "
          f"{len(enron_db_restricted.keywords())} words.")
 
@@ -105,8 +105,8 @@ dataset_sampler = SampledDatasetSampler(kdr_samples=kdr, reuse=reuse)
 # the data collection. With a query log, a QueryLogSpace is used.
 sel = Selectivity.High  # When sampling queries, we use high selectivity keywords
 qsp_size = 100  # Size of the query space
-sample_size = 100  # Amount of queries attacked at a time (sampled from the query space)
-allow_repetition = False  # If queries can repeat
+sample_size = 500  # Amount of queries attacked at a time (sampled from the query space)
+allow_repetition = True  # If queries can repeat
 # From this, we can construct a QuerySelector:
 query_selector = QuerySelector(query_space=query_space, selectivity=sel, query_space_size=qsp_size, queries=sample_size,
                                allow_repetition=allow_repetition, query_log=query_log_obs)

@@ -76,8 +76,8 @@ class Sap(KeywordAttack):
             self._known_response_length[keyword] = vol.selectivity(keyword)
 
         freq = Frequency()
-        self._known_f_matrix = freq(self._known(),known_queries)
-        print(self._known_f_matrix)
+        weekly_quueries = self._split_traces(known_queries,5)
+        self._known_f_matrix = freq(self._known(),weekly_quueries)
 
     @classmethod
     def name(cls) -> str:
@@ -85,7 +85,7 @@ class Sap(KeywordAttack):
 
     @classmethod
     def required_leakage(cls) -> List[LeakagePattern[Any]]:
-        return [TotalVolume(), ResponseLength()]
+        return [TotalVolume(), ResponseLength(), Frequency()]
 
     @classmethod
     def required_extensions(cls) -> Set[Type[E]]:
@@ -108,24 +108,49 @@ class Sap(KeywordAttack):
                                                                   rlens)
         cost_vol = - log_prob_matrix
         return cost_vol
+    
+    def _build_cost_freq(self, freqs:np.ndarray):
+        n_queries_week = 5
+        n_weeks = freqs.shape[1]
+        log_c_matrix = np.zeros((len(freqs), len(self._known_f_matrix)))
+        known_probs = self._known_f_matrix.copy()
+        known_probs[known_probs==0] = min(known_probs[known_probs>0])/100
+        obs_probs = freqs.copy()
+        obs_probs[obs_probs==0] = min(obs_probs[obs_probs>0])/100
+        for i_week in range(n_weeks):
+            log_c_matrix += (n_queries_week * obs_probs[:, i_week]) * np.log(known_probs[:, i_week].T) 
+        cost_freq = - log_c_matrix
+        return cost_freq
+
+    def _split_traces(self, queries:List[str],n_queries_per_week: int=10):
+        weekly_queries = []
+        for query_start_idx in range(0,len(queries),n_queries_per_week):
+            weekly_queries.append(queries[query_start_idx:query_start_idx+n_queries_per_week])
+        return weekly_queries
 
     def recover(self, dataset: Dataset, queries: Iterable[str]) -> List[str]:
         log.info(f"Running {self.name()} at {self._delta:.3f}")
         queries = list(queries)
-        leakage = list(zip(self.required_leakage()[0](dataset, queries), self.required_leakage()[1](dataset, queries)))
+        leakage = list(zip(self.required_leakage()[0](dataset, queries), self.required_leakage()[1](dataset, queries), self.required_leakage()[2](dataset,queries)))
         dataset.extend_with(VolumeExtension)
         dtv = dataset.get_extension(VolumeExtension)
 
         tvol_cost = self._build_cost_tvol(dtv.dataset_volume(),
                                           tvols=[l[0] for l in leakage])  # * tv.dataset_volume() / dtv.dataset_volume()
         rlen_cost = self._build_cost_rlen(len(dataset.doc_ids()), rlens=[l[1] for l in leakage])
-        total_cost = 0.5 * tvol_cost + 0.5 * rlen_cost
+        weekly_queries = self._split_traces(queries,5)
+        freqs = self.required_leakage()[2](dataset,queries)
+        freq_cost = self._build_cost_freq(freqs)
+
+        total_cost = freq_cost#0.5 * tvol_cost + 0.5 * rlen_cost
+
 
         row_ind, col_ind = hungarian(total_cost)
 
         res = ["" for _ in range(len(leakage))]
 
         for i, j in zip(col_ind, row_ind):
+            print(i,j)
             res[i] = self._known_keywords[j]
 
         return res
