@@ -54,18 +54,17 @@ enron_dir = DirectoryEnumerator("data_sources/Enron/maildir")
 # Here, we use the EMailParser() to parse email text files. Alternatively, just calling FileLoader() will convert
 # different file types to text files. Then, FileToDocument() converts the extracted text into an internal document.
 # These filters and loaders represent a pipeline arriving at InputDocuments.
-enron_sent_filter: Filter[RelativeFile, InputDocument] = RelativeContainsFilter("_sent_mail/") | \
-                                                         FileLoader(EMailParser()) | FileToDocument()
+#enron_sent_filter: Filter[RelativeFile, InputDocument] = RelativeContainsFilter("_sent_mail/") | FileLoader(EMailParser()) | FileToDocument()
 
 # These InputDocuments need to be indexed and stored via a Writer, using a WhooshWriter here:
-enron_sent_sink: Sink[InputDocument] = WhooshWriter("enron_sent")
+#enron_sent_sink: Sink[InputDocument] = WhooshWriter("enron_sent")
 
 # The Preprocessor executes the above specified pre-processing (this can take multiple minutes):
 
-preprocessor = Preprocessor(enron_dir, [enron_sent_filter > enron_sent_sink])
-preprocessor.run()
+#preprocessor = Preprocessor(enron_dir, [enron_sent_filter > enron_sent_sink])
+#preprocessor.run()
 
-log.info("Pre-processing done.")
+#log.info("Pre-processing done.")
 
 # The above process works similarly for query logs and range data, see e.g. the index_range.py in evaluation/range.
 
@@ -77,9 +76,27 @@ enron_db: Dataset = backend.load_dataset("enron_sent")
 
 log.info(f"Loaded {enron_db.name()} data. {len(enron_db)} documents with {len(enron_db.keywords())} words.")
 
+enron_kw = enron_db.keywords()
+enron_sel = {}
+for kw in enron_kw:
+    enron_sel[kw] = enron_db.selectivity(kw)
+
+sap_data_sel = {}
+sap_data_kw = []
+with open("/home/user/Documents/LEAKER/enron_db.pkl",'rb') as f:
+    _, keyword_trends = pkl.load(f)
+    for kw in keyword_trends:
+        sap_data_sel[kw] = keyword_trends[kw]['count']
+        sap_data_kw.append(kw)
+
+all_kw = list(enron_kw.intersection(set(sap_data_kw)))
+
 # In [CGPR15], the collection was restricted to the most frequent 500 keywords. In this example, we do the same,
 # by restricting the size and specifying the Selectivity:
-enron_db_restricted = enron_db.restrict_keyword_size(500, Selectivity.High)
+enron_db_chosen_kw = enron_db.restrict_keyword_size(chosen_keywords=all_kw)
+log.info(f"{enron_db_chosen_kw.name()} now contains {len(enron_db_chosen_kw)} documents with "
+         f"{len(enron_db_chosen_kw.keywords())} words.")
+enron_db_restricted = enron_db_chosen_kw.restrict_keyword_size(100, Selectivity.High)
 log.info(f"{enron_db_restricted.name()} now contains {len(enron_db_restricted)} documents with "
          f"{len(enron_db_restricted.keywords())} words.")
 
@@ -88,11 +105,13 @@ log.info(f"{enron_db_restricted.name()} now contains {len(enron_db_restricted)} 
 ###### EVALUATION ######
 queries_obs_file = open("/home/user/Documents/LEAKER/LEAKER/data_sources/Google_Trends/queries_obs.pkl",'rb')
 query_log_obs = DummyKeywordQueryLogFromList("queries_obs", pkl.load(queries_obs_file))
+queries_real_file = open("/home/user/Documents/LEAKER/LEAKER/data_sources/Google_Trends/queries_real.pkl",'rb')
+query_log_real = DummyKeywordQueryLogFromList("queries_obs", pkl.load(queries_real_file))
 query_space = PartialQueryLogSpace
 
 # We can evaluate according to many criteria:
 attacks = [Sap.definition(known_queries=query_log_obs.keywords_list())]  # the attacks to evaluate
-runs = 1  # Amount of evaluations
+runs = 5  # Amount of evaluations
 
 # From this, we can construct a simple EvaluationCase:
 evaluation_case = EvaluationCase(attacks=attacks, dataset=enron_db_restricted, runs=runs)
@@ -105,11 +124,11 @@ dataset_sampler = SampledDatasetSampler(kdr_samples=kdr, reuse=reuse)
 # the data collection. With a query log, a QueryLogSpace is used.
 sel = Selectivity.High  # When sampling queries, we use high selectivity keywords
 qsp_size = 100  # Size of the query space
-sample_size = 500  # Amount of queries attacked at a time (sampled from the query space)
+sample_size = 100  # Amount of queries attacked at a time (sampled from the query space)
 allow_repetition = True  # If queries can repeat
 # From this, we can construct a QuerySelector:
 query_selector = QuerySelector(query_space=query_space, selectivity=sel, query_space_size=qsp_size, queries=sample_size,
-                               allow_repetition=allow_repetition, query_log=query_log_obs)
+                               allow_repetition=allow_repetition, query_log=query_log_real)
 
 out_file = "sap_50-50_Sampled_Data_vol.png"  # Output file (if desired), will be stored in data/figures
 
