@@ -190,8 +190,10 @@ class WhooshDataset(Dataset):
 
         return self
 
-    def restrict_keyword_size(self, max_keywords: int = 0, selectivity: Selectivity = Selectivity.Independent) \
+    def restrict_keyword_size(self, max_keywords: int = 0, selectivity: Selectivity = Selectivity.Independent, chosen_keywords: List[str] = None) \
             -> 'WhooshDataset':
+        if chosen_keywords is not None:
+            return RestrictedWhooshDataset(self, chosen_keywords=chosen_keywords)
         if max_keywords > len(self.keywords()):
             raise ValueError(f"Max keyword restriction for {self.name()} cannot be larger than its keyword size "
                              f"{len(self.keywords())}")
@@ -274,7 +276,8 @@ class RestrictedWhooshDataset(WhooshDataset):
     __restriction_rate: float
 
     def __init__(self, parent: WhooshDataset, max_keywords: int = 0, selectivity: Selectivity = Selectivity.Independent,
-                 restriction_rate: float = 1):
+                 restriction_rate: float = 1, chosen_keywords: List[str] = None):
+
         if max_keywords != 0 and restriction_rate != 1:
             raise ValueError("Cannot restrict a WhooshDataset to both max keywords and a rate!")
 
@@ -282,20 +285,31 @@ class RestrictedWhooshDataset(WhooshDataset):
         self._restricted = []
 
         self.__restriction_rate = restriction_rate
+        
+        if chosen_keywords is not None:
+            log.info(f'Restricting Dataset to chosen keywords')
+            name = f'{parent.name()}_chosen_kw'
 
-        if max_keywords <= 0:
+        elif max_keywords <= 0:
             log.info(f'Restricting Dataset to {restriction_rate * 100}%')
             name = f'{parent.name()}%{restriction_rate}'
         else:
             log.info(f'Restricting Dataset to {max_keywords} keywords')
             name = f'{parent.name()}|{max_keywords}'
+
         self.__parent = parent
 
         self._doc_ids = set(sample(parent._doc_ids, ceil(self.__restriction_rate * len(parent._doc_ids))))
 
         self._keyword_cache = Cache({doc_id: set(self.__parent._keyword_cache[doc_id]) for doc_id in self._doc_ids},
                                     lambda doc_id: set([k for k in self.__parent._keyword_cache[doc_id]]))
-
+        if chosen_keywords is not None:
+            self._keyword_cache = Cache({doc_id: set(self._keyword_cache[doc_id]).intersection(chosen_keywords)
+                            for doc_id in self.__parent._doc_ids if
+                            len(set(self._keyword_cache[doc_id]).intersection(chosen_keywords)) > 0},
+                            lambda doc_id: set([k for k in self.__parent._keyword_cache[doc_id] if
+                                                k in self.keywords()]))
+            self._doc_ids = set(self._keyword_cache.keys())
         if max_keywords != 0:
             keywords: List[str] = [k for ks in self._keyword_cache.values() for k in ks]
             if selectivity == Selectivity.High:
@@ -304,7 +318,7 @@ class RestrictedWhooshDataset(WhooshDataset):
                 keywords_restricted = set([k for k, _ in Counter(keywords).most_common()[:-max_keywords - 1:-1]])
             elif selectivity == Selectivity.PseudoLow:
                 keywords_restricted = set(sorted(filter(lambda key: 10 <= self.__parent.selectivity(key), keywords),
-                                                 key=self.__parent.selectivity)[:max_keywords])
+                                                key=self.__parent.selectivity)[:max_keywords])
             else:  # selectivity == Selectivity.Independent:
                 keywords = list(set(keywords))
                 shuffle(keywords)
@@ -312,13 +326,13 @@ class RestrictedWhooshDataset(WhooshDataset):
 
             # We also have to restrict the keyword cache and doc_ids set *again* to only include the relevant keywords
             self._keyword_cache = Cache({doc_id: set(self._keyword_cache[doc_id]).intersection(keywords_restricted)
-                                         for doc_id in self._doc_ids if
-                                         len(set(self._keyword_cache[doc_id]).intersection(keywords_restricted)) > 0},
+                                        for doc_id in self._doc_ids if
+                                        len(set(self._keyword_cache[doc_id]).intersection(keywords_restricted)) > 0},
                                         lambda doc_id: set([k for k in self.__parent._keyword_cache[doc_id] if
                                                             k in self.keywords()]))
             self._doc_ids = set(self._keyword_cache.keys())
 
-        super(RestrictedWhooshDataset, self).__init__(name, parent._index, True)
+        super(RestrictedWhooshDataset, self).__init__(name, parent._index, is_sampled_or_restricted=True)
 
         self._set_extensions(map(lambda ext: ext.sample(self), parent._get_extensions()))
 
