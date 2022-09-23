@@ -1,13 +1,17 @@
 """Some Code in this file has been adapted from https://github.com/simon-oya/USENIX21-sap-code"""
+from calendar import week
 from logging import getLogger
 from typing import Iterable, List, Any, Dict, Set, TypeVar, Type, Union
 
 import numpy as np
+from collections import Counter
 from scipy.optimize import linear_sum_assignment as hungarian
+
+from leaker.extension import identity
 
 from ..api import Extension, KeywordAttack, Dataset, LeakagePattern, KeywordQueryLog
 from ..extension import VolumeExtension
-from ..pattern import ResponseLength, TotalVolume, Frequency
+from ..pattern import ResponseLength, TotalVolume, Frequency, ResponseIdentity
 
 log = getLogger(__name__)
 
@@ -53,8 +57,10 @@ class Sap(KeywordAttack):
     _known_keywords: Dict
     _delta: float
     _known_f_matrix: np.ndarray
+    _chosen_keywords: List[str]
+    _freq: bool = False
 
-    def __init__(self, known: Dataset, known_queries: Union[List[str],KeywordQueryLog] = None):
+    def __init__(self, known: Dataset, known_frequencies: np.ndarray = None, chosen_keywords: List[str] = None):
         super(Sap, self).__init__(known)
 
         self._delta = known.sample_rate()
@@ -74,10 +80,12 @@ class Sap(KeywordAttack):
             i += 1
             self._known_volume[keyword] = vol.total_volume(keyword)
             self._known_response_length[keyword] = vol.selectivity(keyword)
-        print("known queries:",len(known_queries))
-        freq = Frequency()
-        weekly_queries = self._split_traces(known_queries,2)
-        self._known_f_matrix = freq(self._known(),weekly_queries)
+        
+        if chosen_keywords is not None:
+            assert known_frequencies is not None, log.error("Auxiliary frequency knowledge needed for SAP frequency attack.")
+            self._freq = True
+        self._known_f_matrix = known_frequencies
+        self._chosen_keywords = chosen_keywords
 
     @classmethod
     def name(cls) -> str:
@@ -131,30 +139,88 @@ class Sap(KeywordAttack):
             weekly_queries.append(queries[query_start_idx:query_start_idx+n_queries_per_week])
         return weekly_queries
 
+    def _process_traces(self,rid):
+        tag_traces = []
+        seen_tuples = {}
+        tag_info = {}
+        count = 0
+        traces = self._split_traces(rid)
+        for week in traces:
+            weekly_tags = []
+            for trace in week:
+                obs_sorted = tuple(sorted(trace))
+                if obs_sorted not in seen_tuples:
+                    seen_tuples[obs_sorted] = count
+                    tag_info[count] = obs_sorted
+                    count += 1
+                weekly_tags.append(seen_tuples[obs_sorted])
+            tag_traces.append(weekly_tags)
+        return tag_traces, tag_info
+    
+    def _build_trend_matrix(self,traces, n_tags):
+        n_weeks = len(traces)
+        tag_trend_matrix = np.zeros((n_tags, n_weeks))
+        for i_week, weekly_tags in enumerate(traces):
+            if len(weekly_tags) > 0:
+                counter = Counter(weekly_tags)
+                for key in counter:
+                    tag_trend_matrix[key, i_week] = counter[key] / len(weekly_tags)
+        return tag_trend_matrix
+
+    def _build_cost_freq2(self, trends, nq_per_week):
+        log_c_matrix = np.zeros((len(self._known_f_matrix), len(trends)))
+        for i_week, nq in enumerate(nq_per_week):
+            probabilities = self._known_f_matrix[:, i_week].copy()
+            probabilities[probabilities == 0] = min(probabilities[probabilities > 0]) / 100
+            log_c_matrix += (nq * trends[:, i_week]) * np.log(np.array([probabilities]).T)
+        print(log_c_matrix.shape)
+        return -log_c_matrix
+
     def recover(self, dataset: Dataset, queries: Iterable[str], alpha: float = 0.75) -> List[str]:
         log.info(f"Running {self.name()} at {self._delta:.3f}")
         queries = list(queries)
-        print("obs queries:",len(queries))
-        leakage = list(zip(self.required_leakage()[0](dataset, queries), self.required_leakage()[1](dataset, queries), self.required_leakage()[2](dataset,queries)))
+        n_docs_test = len(dataset.doc_ids())
+        n_docs_train = len(self._known().doc_ids())
+        rid = ResponseIdentity()
+        tag_traces,tag_info = self._process_traces(rid(dataset, queries))
+        tag_trends = self._build_trend_matrix(tag_traces,len(tag_info))
+        nq_per_week = [len(trace) for trace in tag_traces]
+        freq = self._build_cost_freq2(tag_trends, nq_per_week)
+        print(freq)
+        leakage = list(zip(self.required_leakage()[0](dataset, queries), self.required_leakage()[1](dataset, queries)))
         dataset.extend_with(VolumeExtension)
         dtv = dataset.get_extension(VolumeExtension)
 
         tvol_cost = self._build_cost_tvol(dtv.dataset_volume(),
                                           tvols=[l[0] for l in leakage])  # * tv.dataset_volume() / dtv.dataset_volume()
-        rlen_cost = self._build_cost_rlen(len(dataset.doc_ids()), rlens=[l[1] for l in leakage])
-        weekly_queries = self._split_traces(queries,2)
-        freqs = self.required_leakage()[2](dataset,weekly_queries)
-        freq_cost = self._build_cost_freq(freqs)
+        rlen_cost = self._build_cost_rlen(n_docs_test, rlens=[l[1] for l in leakage])
+        
+        # freqs = self.required_leakage()[2](dataset,weekly_queries)
+        #freq_cost = self._build_cost_freq(freqs)
 
-        total_cost = alpha*freq_cost + (1-alpha)*rlen_cost#0.5 * tvol_cost + 0.5 * rlen_cost
+        total_cost = freq#alpha*freq_cost + (1-alpha)*rlen_cost#0.5 * tvol_cost + 0.5 * rlen_cost
 
 
         row_ind, col_ind = hungarian(total_cost)
 
+        query_predictions_for_each_tag = {}
+        for tag, keyword in zip(col_ind, row_ind):
+            query_predictions_for_each_tag[tag] = keyword
+        query_predictions_for_each_obs = []
+        for weekly_tags in tag_traces:
+            query_predictions_for_each_obs.append([query_predictions_for_each_tag[tag_id] for tag_id in weekly_tags])
+        #queries_tagged = [self._chosen_keywords.index(kw) for kw in queries]
+        weekly_queries = self._split_traces(queries,5)
+        pred = [self._chosen_keywords[kw] for week_kw in query_predictions_for_each_obs for kw in week_kw]
+        flat_real = [kw for week_kws in weekly_queries for kw in week_kws]
+        #print(flat_real)
+        accuracy = np.mean(np.array([1 if real == prediction else 0 for real, prediction in zip(flat_real, pred)]))
+        #print(pred)
+        print(accuracy)
         res = ["" for _ in range(len(leakage))]
 
         for i, j in zip(col_ind, row_ind):
             #print(i,j)
             res[i] = self._known_keywords[j]
 
-        return res
+        return pred

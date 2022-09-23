@@ -194,39 +194,6 @@ class KeywordQuerySpace(QuerySpace):
         raise NotImplementedError
 
 
-class KeywordAuxQuerySpace(KeywordQuerySpace):
-    __space: List[Set[Tuple[str, int]]]
-    __allow_repetition: bool
-
-    def __init__(self, full: Dataset, known: Dataset, selectivity: Selectivity, size: int,
-                 aux_knowledge: dict = None,
-                 query_log: KeywordQueryLog = None,
-                 allow_repetition: bool = False):
-        if aux_knowledge is None:
-            super().__init__(full, known, selectivity, size, query_log, allow_repetition)
-        else:
-            self.__space: List[Set[Tuple[str, int]]] = []
-
-            for i, candidate_keywords in enumerate(self._candidates(full, known, query_log)):
-                if len(candidate_keywords) < size:
-                    log.warning(f"Set of candidate keywords with length {len(candidate_keywords)} at position {i} smaller "
-                                f"than configured query space size of {size}. Requested selectivity ignored.")
-                    self.__space.append(candidate_keywords)
-                    continue
-                if selectivity == Selectivity.High:
-                    self.__space.append(set(sorted(candidate_keywords, key=lambda item: full.selectivity(item[0]),
-                                                reverse=True)[:size]))
-                elif selectivity == Selectivity.Low:
-                    self.__space.append(set(sorted(candidate_keywords, key=lambda item: full.selectivity(item[0]))[:size]))
-                elif selectivity == Selectivity.PseudoLow:
-                    self.__space.append(set(sorted(filter(lambda item: 10 <= full.selectivity(item[0]), candidate_keywords),
-                                                key=lambda item: full.selectivity(item[0]))[:size]))
-                elif selectivity == Selectivity.Independent:
-                    self.__space.append(set(sample(population=candidate_keywords, k=size)))
-
-            self.__allow_repetition = allow_repetition
-
-
 class RangeQuerySpace(QuerySpace):
     """
     A class to represent a QuerySpace for range queries.

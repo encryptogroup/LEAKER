@@ -13,6 +13,7 @@ from typing import List, Iterable, Tuple
 from leaker.api import InputDocument, Dataset, DummyKeywordQueryLogFromList, Selectivity, RandomRangeDatabase, RangeAttack, LeakagePattern, \
     RangeDatabase
 from leaker.attack import Countv2, Sap, PartialQuerySpace, PartialQueryLogSpace, GeneralizedKKNO, UniformRangeQuerySpace
+from leaker.attack.query_space import AuxiliaryKnowledgeQuerySpace
 from leaker.evaluation import KnownDatasetSampler, SampledDatasetSampler, EvaluationCase, QuerySelector, KeywordAttackEvaluator, MAError, \
     RangeAttackEvaluator
 from leaker.plotting import KeywordMatPlotLibSink, RangeMatPlotLibSink
@@ -76,41 +77,45 @@ enron_db: Dataset = backend.load_dataset("enron_sent")
 
 log.info(f"Loaded {enron_db.name()} data. {len(enron_db)} documents with {len(enron_db.keywords())} words.")
 
-enron_kw = enron_db.keywords()
-enron_sel = {}
-for kw in enron_kw:
-    enron_sel[kw] = enron_db.selectivity(kw)
+# enron_kw = enron_db.keywords()
+# enron_sel = {}
+# for kw in enron_kw:
+#     enron_sel[kw] = enron_db.selectivity(kw)
 
-sap_data_sel = {}
-sap_data_kw = []
-with open("/home/user/Documents/LEAKER/enron_db.pkl",'rb') as f:
-    _, keyword_trends = pkl.load(f)
-    for kw in keyword_trends:
-        sap_data_sel[kw] = keyword_trends[kw]['count']
-        sap_data_kw.append(kw)
+# sap_data_sel = {}
+# sap_data_kw = []
+# with open("/home/user/Documents/LEAKER/enron_db.pkl",'rb') as f:
+#     _, keyword_trends = pkl.load(f)
+#     for kw in keyword_trends:
+#         sap_data_sel[kw] = keyword_trends[kw]['count']
+#         sap_data_kw.append(kw)
 
-all_kw = list(enron_kw.intersection(set(sap_data_kw)))
+# all_kw = list(enron_kw.intersection(set(sap_data_kw)))
 
 # In [CGPR15], the collection was restricted to the most frequent 500 keywords. In this example, we do the same,
 # by restricting the size and specifying the Selectivity:
-enron_db_chosen_kw = enron_db.restrict_keyword_size(chosen_keywords=all_kw)
-log.info(f"{enron_db_chosen_kw.name()} now contains {len(enron_db_chosen_kw)} documents with "
-         f"{len(enron_db_chosen_kw.keywords())} words.")
-enron_db_restricted = enron_db_chosen_kw.restrict_keyword_size(100, Selectivity.High)
+enron_db_restricted = enron_db.restrict_keyword_size(3000,Selectivity.High)
 log.info(f"{enron_db_restricted.name()} now contains {len(enron_db_restricted)} documents with "
          f"{len(enron_db_restricted.keywords())} words.")
+
 
 # For the range case, you can similarly use a RangeBackend.
 
 ###### EVALUATION ######
-queries_obs_file = open("/home/user/Documents/LEAKER/LEAKER/data_sources/Google_Trends/queries_obs.pkl",'rb')
-query_log_obs = DummyKeywordQueryLogFromList("queries_obs", pkl.load(queries_obs_file))
-queries_real_file = open("/home/user/Documents/LEAKER/LEAKER/data_sources/Google_Trends/queries_real.pkl",'rb')
-query_log_real = DummyKeywordQueryLogFromList("queries_obs", pkl.load(queries_real_file))
-query_space = PartialQueryLogSpace
+# queries_obs_file = open("/home/user/Documents/LEAKER/LEAKER/data_sources/Google_Trends/queries_obs.pkl",'rb')
+# query_log_obs = DummyKeywordQueryLogFromList("queries_obs", pkl.load(queries_obs_file))
+# queries_real_file = open("/home/user/Documents/LEAKER/LEAKER/data_sources/Google_Trends/queries_real.pkl",'rb')
+# query_log_real = DummyKeywordQueryLogFromList("queries_obs", pkl.load(queries_real_file))
+data: dict = None
+with open("/home/user/Documents/LEAKER/LEAKER/data_sources/Google_Trends/aux_knowledge.pkl",'rb') as f:
+    data = pkl.load(f)
+
+query_log = DummyKeywordQueryLogFromList("queries_cli", data['queries'])
+query_space = AuxiliaryKnowledgeQuerySpace#PartialQueryLogSpace
 
 # We can evaluate according to many criteria:
-attacks = [Sap.definition(known_queries=query_log_obs.keywords_list())]  # the attacks to evaluate
+print(data['frequencies'].shape)
+attacks = [Sap.definition(known_frequencies=data['frequencies'], chosen_keywords=data['keywords'])]  # the attacks to evaluate
 runs = 5  # Amount of evaluations
 
 # From this, we can construct a simple EvaluationCase:
@@ -128,7 +133,7 @@ sample_size = 100  # Amount of queries attacked at a time (sampled from the quer
 allow_repetition = True  # If queries can repeat
 # From this, we can construct a QuerySelector:
 query_selector = QuerySelector(query_space=query_space, selectivity=sel, query_space_size=qsp_size, queries=sample_size,
-                               allow_repetition=allow_repetition, query_log=query_log_real)
+                               allow_repetition=allow_repetition, query_log=query_log)
 
 out_file = "sap_50-50_Sampled_Data_vol.png"  # Output file (if desired), will be stored in data/figures
 
