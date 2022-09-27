@@ -116,7 +116,7 @@ query_space = AuxiliaryKnowledgeQuerySpace#PartialQueryLogSpace
 # We can evaluate according to many criteria:
 print(data['frequencies'].shape)
 attacks = [Sap.definition(known_frequencies=data['frequencies'], chosen_keywords=data['keywords'])]  # the attacks to evaluate
-runs = 5  # Amount of evaluations
+runs = 1  # Amount of evaluations
 
 # From this, we can construct a simple EvaluationCase:
 evaluation_case = EvaluationCase(attacks=attacks, dataset=enron_db_restricted, runs=runs)

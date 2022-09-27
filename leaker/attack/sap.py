@@ -74,7 +74,7 @@ class Sap(KeywordAttack):
 
         vol = known.get_extension(VolumeExtension)
         i = 0
-        for keyword in known.keywords():
+        for keyword in chosen_keywords:
             self._known_keywords[i] = keyword
             self._known_keywords[keyword] = i
             i += 1
@@ -86,6 +86,14 @@ class Sap(KeywordAttack):
             self._freq = True
         self._known_f_matrix = known_frequencies
         self._chosen_keywords = chosen_keywords
+
+
+        # if known_frequencies is not None:
+        #     self._freq = True
+        #     if chosen_keywords is not None:
+        #         self._chosen_keywords = chosen_keywords
+        #         log.info("Using List of chosen keywords as additional auxiliary knowledge")
+        #     else: chosen_keywords = list(known.keywords())
 
     @classmethod
     def name(cls) -> str:
@@ -117,6 +125,16 @@ class Sap(KeywordAttack):
         cost_vol = - log_prob_matrix
         return cost_vol
     
+    def _build_cost_rlen2(self, n: int, tag_info):
+        kw_probs_train = [self._known_response_length[self._known_keywords[i]] / len(self._known().doc_ids())
+                          for i in range(len(self._chosen_keywords))]
+        kw_counts_test = [len(tag_info[tag]) for tag in tag_info]
+        
+        log_prob_matrix = compute_log_binomial_probability_matrix(n, kw_probs_train, kw_counts_test)
+        cost_vol = - log_prob_matrix
+        return cost_vol
+
+
     def _build_cost_freq(self, freqs:np.ndarray):
         n_queries_week = 2
         n_weeks = freqs.shape[1]
@@ -173,7 +191,6 @@ class Sap(KeywordAttack):
             probabilities = self._known_f_matrix[:, i_week].copy()
             probabilities[probabilities == 0] = min(probabilities[probabilities > 0]) / 100
             log_c_matrix += (nq * trends[:, i_week]) * np.log(np.array([probabilities]).T)
-        print(log_c_matrix.shape)
         return -log_c_matrix
 
     def recover(self, dataset: Dataset, queries: Iterable[str], alpha: float = 0.75) -> List[str]:
@@ -186,19 +203,18 @@ class Sap(KeywordAttack):
         tag_trends = self._build_trend_matrix(tag_traces,len(tag_info))
         nq_per_week = [len(trace) for trace in tag_traces]
         freq = self._build_cost_freq2(tag_trends, nq_per_week)
-        print(freq)
+        
         leakage = list(zip(self.required_leakage()[0](dataset, queries), self.required_leakage()[1](dataset, queries)))
         dataset.extend_with(VolumeExtension)
         dtv = dataset.get_extension(VolumeExtension)
 
-        tvol_cost = self._build_cost_tvol(dtv.dataset_volume(),
-                                          tvols=[l[0] for l in leakage])  # * tv.dataset_volume() / dtv.dataset_volume()
-        rlen_cost = self._build_cost_rlen(n_docs_test, rlens=[l[1] for l in leakage])
-        
+        #tvol_cost = self._build_cost_tvol(dtv.dataset_volume(),tvols=[l[0] for l in leakage])  # * tv.dataset_volume() / dtv.dataset_volume()
+        #rlen_cost = self._build_cost_rlen(n_docs_test, rlens=[l[1] for l in leakage])
+        rlen = self._build_cost_rlen2(n_docs_test,tag_info)#rlens=[l[1] for l in leakage])
         # freqs = self.required_leakage()[2](dataset,weekly_queries)
         #freq_cost = self._build_cost_freq(freqs)
 
-        total_cost = freq#alpha*freq_cost + (1-alpha)*rlen_cost#0.5 * tvol_cost + 0.5 * rlen_cost
+        total_cost = 0.5*freq+0.5*rlen#0.5*freq+0.5*rlen_cost#alpha*freq_cost + (1-alpha)*rlen_cost#0.5 * tvol_cost + 0.5 * rlen_cost
 
 
         row_ind, col_ind = hungarian(total_cost)
@@ -210,17 +226,9 @@ class Sap(KeywordAttack):
         for weekly_tags in tag_traces:
             query_predictions_for_each_obs.append([query_predictions_for_each_tag[tag_id] for tag_id in weekly_tags])
         #queries_tagged = [self._chosen_keywords.index(kw) for kw in queries]
-        weekly_queries = self._split_traces(queries,5)
+        #weekly_queries = self._split_traces(queries,5)
         pred = [self._chosen_keywords[kw] for week_kw in query_predictions_for_each_obs for kw in week_kw]
-        flat_real = [kw for week_kws in weekly_queries for kw in week_kws]
-        #print(flat_real)
-        accuracy = np.mean(np.array([1 if real == prediction else 0 for real, prediction in zip(flat_real, pred)]))
-        #print(pred)
-        print(accuracy)
-        res = ["" for _ in range(len(leakage))]
-
-        for i, j in zip(col_ind, row_ind):
-            #print(i,j)
-            res[i] = self._known_keywords[j]
-
+        #flat_real = [kw for week_kws in weekly_queries for kw in week_kws]
+        #accuracy = np.mean(np.array([1 if real == prediction else 0 for real, prediction in zip(flat_real, pred)]))
+        #print(accuracy)
         return pred
