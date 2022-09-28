@@ -23,7 +23,8 @@ class DataSink(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def offer_data(self, series_id: str, user_id: int, known_data_rate: float, recovery_rate: float) -> None:
+    def offer_data(self, series_id: str, user_id: int, known_data_rate: float, recovery_rate: float,
+                   document_recovery_rate: float = None) -> None:
         """
         Passes a new data point the the data sink.
 
@@ -36,7 +37,9 @@ class DataSink(ABC):
         known_data_rate : float
             the known data rate the attack was evaluated on
         recovery_rate : float
-            the resulting recovery rate
+            the resulting keyword recovery rate
+        document_recovery_rate : float
+            the resulting document recovery rate
         """
         raise NotImplementedError
 

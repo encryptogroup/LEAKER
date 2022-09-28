@@ -1,7 +1,7 @@
 """
 For License information see the LICENSE file.
 
-Authors: Johannes Leupold, Amos Treiber
+Authors: Johannes Leupold, Amos Treiber, Patrick Ehrler
 
 """
 import os
@@ -47,7 +47,8 @@ class MatPlotLibSink(DataSink, ABC):
     def register_series(self, series_id: str) -> None:
         self.__data[series_id] = {}
 
-    def offer_data(self, series_id: str, user_id: int, known_data_rate: float, recovery_rate: float) -> None:
+    def offer_data(self, series_id: str, user_id: int, known_data_rate: float, recovery_rate: float,
+                   document_recovery_rate: float = None) -> None:
         if user_id not in self.__data[series_id]:
             self.__data[series_id][user_id] = {}
         if known_data_rate not in self.__data[series_id][user_id]:
@@ -104,6 +105,119 @@ class KeywordMatPlotLibSink(MatPlotLibSink):
             if not os.path.exists(FIGURE_DIRECTORY):
                 os.makedirs(FIGURE_DIRECTORY)
             plt.savefig(self._out_file)
+            import tikzplotlib
+            tikzplotlib.save(f"{self._out_file[:-4]}.tikz")
+        else:
+            plt.show()
+
+
+class KeywordDocumentMatPlotLibSink(DataSink, ABC):
+    """
+    A data sink for plotting the performance data of keyword and document recovery with matplotlib.
+
+    Parameters
+    ----------
+    out_file : Optional[str]
+        if set, the plot will be written to the specified file
+        default: None
+    markers : Optional[List[str]]
+        the actual point markers to use, as defined by matplotlib.
+        the markers are used in order.
+        if not specified, a set of six default markers will be used.
+        default: None
+    """
+
+    __markers: List[str]
+
+    _out_file: Optional[str]
+    __data: Dict[str, Dict[int, Dict[float, List[Tuple[float, float]]]]]
+
+    def __init__(self, out_file: Optional[str] = None, markers: Optional[List[str]] = None):
+        self.__markers = markers or ['x', 'o', 's', 'D', '|', '+']
+        self._out_file = out_file
+        if self._out_file is not None:
+            if self._out_file.count('.') > 1:
+                self._out_file = self._out_file.replace('.', '_', 1)
+            self._out_file = FIGURE_DIRECTORY + self._out_file
+        self.__data = {}
+
+    def register_series(self, series_id: str) -> None:
+        self.__data[series_id] = {}
+
+    def offer_data(self, series_id: str, known_data_rate: float, recovery_rate: float, user_id: int = 0,
+                   document_recovery_rate: float = 0.0) -> None:
+        if user_id not in self.__data[series_id]:
+            self.__data[series_id][user_id] = {}
+        if known_data_rate not in self.__data[series_id][user_id]:
+            self.__data[series_id][user_id][known_data_rate] = []
+        self.__data[series_id][user_id][known_data_rate].append((recovery_rate, document_recovery_rate))
+
+    def yield_plotpoints(self, use_mean: bool = False) \
+            -> Iterator[Tuple[np.ndarray, np.ndarray, str, np.ndarray, np.ndarray, str]]:
+        err = np.mean if use_mean else np.median
+        for series_id in self.__data.keys():
+            if len(self.__data[series_id]) == 0:
+                continue
+
+            series_data: Dict[int, Dict[float, List[Tuple[float, float]]]] = self.__data[series_id]
+            x = np.array(sorted(series_data[0].keys()))
+            y_kw = np.array([err([err([e[0] for e in series_data[user_id][kdr]]) for user_id in series_data.keys()])
+                             for kdr in x])
+            y_doc = np.array([err([err([e[1] for e in series_data[user_id][kdr]]) for user_id in series_data.keys()])
+                              for kdr in x])
+
+            y_kw_max = np.array(
+                [np.max([[e[0] for e in series_data[user_id][kdr]] for user_id in series_data.keys()]) for kdr in
+                 x]) - y_kw
+            y_kw_min = y_kw - np.array(
+                [np.min([[e[0] for e in series_data[user_id][kdr]] for user_id in series_data.keys()]) for kdr in x])
+            y_doc_max = np.array(
+                [np.max([[e[1] for e in series_data[user_id][kdr]] for user_id in series_data.keys()]) for kdr in
+                 x]) - y_doc
+            y_doc_min = y_doc - np.array(
+                [np.min([[e[1] for e in series_data[user_id][kdr]] for user_id in series_data.keys()]) for kdr in x])
+
+            yield x, y_kw, y_doc, series_id, y_kw_min, y_kw_max, y_doc_min, y_doc_max, self.__markers.pop(0)
+
+    def flush(self) -> None:
+        fig, axes = plt.subplots(ncols=2, figsize=(12, 5))
+
+        for ax in axes:
+            ax.set_xlabel('Partial Knowledge in %')
+            ax.set_xlim(0, 105)
+            ax.set_xticks(np.linspace(0, 100, num=11))
+
+            ax.set_ylabel('Recovery Rate')
+            ax.set_ylim(0, 1.05)
+            ax.set_yticks(np.linspace(0, 1, num=6))
+
+            ax.grid(True)
+
+        axes[0].set_title('Keyword Recovery')
+        axes[1].set_title('Document Recovery')
+
+        for x, y_kw, y_doc, series_id, y_kw_min, y_kw_max, y_doc_min, y_doc_max, marker in self.yield_plotpoints():
+            # recovered keyword rate plot
+            if not y_kw_max.any() and not y_kw_min.any():
+                axes[0].plot(x * 100, y_kw, label=series_id, marker=marker, linewidth=1)
+            else:
+                axes[0].errorbar(x * 100, y_kw, yerr=[y_kw_min, y_kw_max], label=series_id, marker=marker,
+                                 linewidth=1, capsize=3)
+
+            # recovered document rate plot
+            if not y_doc_max.any() and not y_doc_min.any():
+                axes[1].plot(x * 100, y_doc, label=series_id, marker=marker, linewidth=1)
+            else:
+                axes[1].errorbar(x * 100, y_doc, yerr=[y_doc_min, y_doc_max], label=series_id, marker=marker,
+                                 linewidth=1, capsize=3)
+
+        axes[0].legend()
+        axes[1].legend()
+
+        if self._out_file is not None:
+            if not os.path.exists(FIGURE_DIRECTORY):
+                os.makedirs(FIGURE_DIRECTORY)
+            fig.savefig(self._out_file, dpi=300)
             import tikzplotlib
             tikzplotlib.save(f"{self._out_file[:-4]}.tikz")
         else:

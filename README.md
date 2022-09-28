@@ -37,6 +37,7 @@ you can use any input directory with LEAKER.
 * `evaluations` contains the scripts to replicate the experiments in our paper. The `GOOGLE_README.txt` contains the
 instructions given to the participants that evaluated attacks on their private Google data.
 * `examples.py` contains simple examples to show the usage of LEAKER.
+* `leap_experiment.py` contains the reproduction of the LEAP experiment [NHP+21].
 * `leaker` contains the core LEAKER module.
 * `tests` contains tests.
 
@@ -45,7 +46,10 @@ instructions given to the participants that evaluated attacks on their private G
 #### Usage
 Refer to `examples.py` to see how to use LEAKER.
 First, you need to download/extract the raw data into a corresponding subdirectory of `data_sources`. Then, you can index
-this data source (necessary only once) and load it with LEAKER to perform evaluations. 
+this data source (necessary only once) and load it with LEAKER to perform evaluations.
+
+To reproduce the LEAP experiment refer to `leap_experiment.py`. You also need to download/extract the raw Enron dataset 
+to the subdirectory of `data_sources`.
 
 To generate the documentation: enter `pdoc --html leaker` with LEAKER/ as the current working directory.
 
