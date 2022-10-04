@@ -226,9 +226,9 @@ class Sap(KeywordAttack):
         for weekly_tags in tag_traces:
             query_predictions_for_each_obs.append([query_predictions_for_each_tag[tag_id] for tag_id in weekly_tags])
         #queries_tagged = [self._chosen_keywords.index(kw) for kw in queries]
-        #weekly_queries = self._split_traces(queries,5)
+        weekly_queries = self._split_traces(queries,5)
         pred = [self._chosen_keywords[kw] for week_kw in query_predictions_for_each_obs for kw in week_kw]
-        #flat_real = [kw for week_kws in weekly_queries for kw in week_kws]
-        #accuracy = np.mean(np.array([1 if real == prediction else 0 for real, prediction in zip(flat_real, pred)]))
-        #print(accuracy)
+        flat_real = [kw for week_kws in weekly_queries for kw in week_kws]
+        accuracy = np.mean(np.array([1 if real == prediction else 0 for real, prediction in zip(flat_real, pred)]))
+        print(accuracy)
         return pred

@@ -137,7 +137,7 @@ attacks = [Sap.definition(known_frequencies=query_log.frequencies(), chosen_keyw
 runs = 1  # Amount of evaluations
 
 # From this, we can construct a simple EvaluationCase:
-evaluation_case = EvaluationCase(attacks=attacks, dataset=enron_db_restricted, runs=runs)
+evaluation_case = EvaluationCase(attacks=attacks, dataset=ubuntu_db,runs=runs)#enron_db_restricted, runs=runs)
 
 kdr = [.5]  # known data rates
 reuse = True  # If we reuse sampled datasets a number of times (=> we will have a 5x5 evaluation here)
