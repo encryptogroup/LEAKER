@@ -576,6 +576,43 @@ class GoogleLogParser(JSONParser):
                        payload)
 
 
+class UbuntuMailParser(EMailParser):
+    """
+    A parser for .mbox e-mail files aiming at excluding e-mail headers, e-mail addresses and placeholders inserted for
+    images.
+    """
+
+    def parse(self, f: TextIO) -> Iterator[Tuple[str, str, str]]:
+        m: str = ""
+        i: int = 0
+        for l in f:
+            if re.match(r"^From .*@.*$", l):
+                """New email"""
+                mail = email.message_from_string(m)
+                payload: str = ""
+                if mail.is_multipart():
+                    for part in mail.walk():
+                        content_type = part.get_content_type()
+                        content_disposition = str(part.get('Content-Disposition'))
+
+                        # skip any text/plain (txt) attachments
+                        if content_type == 'text/plain' and 'attachment' not in content_disposition:
+                            payload = UbuntuMailParser._payload_to_string(part.get_payload(decode=True))  # decode
+                            break
+                # not multipart - i.e. plain text, no attachments, keeping fingers crossed
+                else:
+                    payload = UbuntuMailParser._payload_to_string(mail.get_payload(decode=True))
+
+                i += 1
+                m = ""
+                yield (str(i),
+                       " ".join([line for line in payload.split("\n") if not UbuntuMailParser._filtered(line.strip())]), "")
+
+            else:
+                """Line belongs to prior email"""
+                m += l
+
+
 class GMailParser(EMailParser):
     """
     A parser for .mbox e-mail files aiming at excluding e-mail headers, e-mail addresses and placeholders inserted for

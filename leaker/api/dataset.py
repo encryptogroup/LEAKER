@@ -481,7 +481,7 @@ class DummyKeywordQueryLogFromTrends(KeywordQueryLog):
 
     def __init__(self, name: str, keywords_trends: dict, n_kw: int, weeks: Tuple[int], offset:int=0, n_queries_per_week: int = 5, selectivity: Selectivity=Selectivity.High):
         self.__name = name
-        self.__keywords_list = keywords_trends.keys()
+        self.__keywords_list = list(keywords_trends.keys())
         self.__keywords_trends = keywords_trends
         self.__frequencies = self._trend_matrix()
         assert n_kw <= len(self.__keywords_list), f"The number of keywords to choose has to be smaller than {len(self.__keywords_list)}."

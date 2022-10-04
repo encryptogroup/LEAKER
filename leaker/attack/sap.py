@@ -136,7 +136,7 @@ class Sap(KeywordAttack):
 
 
     def _build_cost_freq(self, freqs:np.ndarray):
-        n_queries_week = 2
+        n_queries_week = 5
         n_weeks = freqs.shape[1]
         print(self._known_f_matrix.shape)
         print(freqs.shape)
