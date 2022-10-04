@@ -102,9 +102,9 @@ class AuxiliaryKnowledgeQuerySpace(KeywordQuerySpace):
     def select(self, n: int=-1) -> Iterator[List[str]]:
         query_log = super()._get_log()
         if n > 0:
-            yield from [query_log.keywords_list()]#[query_log.keywords_list()[:n]]
+            yield from [query_log.generate_queries()]#[query_log.keywords_list()[:n]]
         else:
-            yield from [query_log.keywords_list()]
+            yield from [query_log.generate_queries()]
         
 
 class UniformRangeQuerySpace(RangeQuerySpace):

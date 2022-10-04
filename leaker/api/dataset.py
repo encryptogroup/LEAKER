@@ -5,6 +5,8 @@ Authors: Johannes Leupold
 
 """
 import os
+import random
+import numpy as np
 from abc import ABC, abstractmethod
 from logging import getLogger
 from typing import Iterator, Set, TypeVar, Type, Dict, List, Iterable, Optional, Union, Tuple
@@ -464,14 +466,31 @@ class KeywordQueryLog(Data):
         yield from self.keywords_list(user_id)
 
 
-class DummyKeywordQueryLogFromList(KeywordQueryLog):
+class DummyKeywordQueryLogFromTrends(KeywordQueryLog):
     """Simulates a log by taking a list of queries"""
     __name: str
     __keywords_list: List[str]
+    __keywords_trends: dict
+    __frequencies: np.ndarray
+    __n_kw: int
+    __weeks: Tuple[int]
+    __offset: int
+    __selectivity: Selectivity
+    __n_queries_per_week: int
+    __chosen_keywords: List[str] = None
 
-    def __init__(self, name: str, list: List[str]):
+    def __init__(self, name: str, keywords_trends: dict, n_kw: int, weeks: Tuple[int], offset:int=0, n_queries_per_week: int = 5, selectivity: Selectivity=Selectivity.High):
         self.__name = name
-        self.__keywords_list = list
+        self.__keywords_list = keywords_trends.keys()
+        self.__keywords_trends = keywords_trends
+        self.__frequencies = self._trend_matrix()
+        assert n_kw <= len(self.__keywords_list), f"The number of keywords to choose has to be smaller than {len(self.__keywords_list)}."
+        self.__n_kw = n_kw
+        assert offset >=0 and weeks[0]-offset >=0 and weeks[0] < weeks[1] and weeks[1] <= len(keywords_trends), f"The weeks can only range from 0 to {len(keywords_trends)}"
+        self.__weeks = weeks
+        self.__offset = offset
+        self.__selectivity = selectivity
+        self.__n_queries_per_week = n_queries_per_week
 
     def name(self) -> str:
         return self.__name
@@ -482,6 +501,45 @@ class DummyKeywordQueryLogFromList(KeywordQueryLog):
     def keywords_list(self, user_id: str = None, remove_endstates: bool = False) -> List[str]:
         # Ignores user_id and remove_endstates and instead just yield the initially supplied list.
         return self.__keywords_list
+    
+    def chosen_keywords(self):
+        return self.__chosen_keywords
+    
+    def _choose_keywords(self):
+        print("chose keywords")
+        if self.__selectivity == Selectivity.High:
+            chosen_keywords = sorted(self.__keywords_trends.keys(), key=lambda x: self.__keywords_trends[x]['count'], reverse=True)[:self.__n_kw]
+        elif self.__selectivity == Selectivity.Low:
+            chosen_keywords = sorted(self.__keywords_trends.keys(), key=lambda x: self.__keywords_trends[x]['count'])[:self.__n_kw]
+        elif self.__selectivity == Selectivity.Independent:
+            chosen_keywords = random.sample(self.__keywords_trends.keys(),self.__n_kw)
+        else:
+            print("Error: Unknown selectivity")
+        self.__chosen_keywords = chosen_keywords
+        return chosen_keywords
+    
+    def _trend_matrix(self,chosen_keywords:list=None):
+        if chosen_keywords is None:
+            chosen_keywords = self.__keywords_trends.keys()
+        trend_matrix = np.array([self.__keywords_trends[kw]['trend'] for kw in chosen_keywords])
+        n_kw, n_weeks = trend_matrix.shape
+        for i_col in range(n_weeks):
+            if sum(trend_matrix[:,i_col]) == 0:
+                trend_matrix[:,i_col] = 1/n_kw
+            else:
+                trend_matrix[:,i_col] = trend_matrix[:,i_col] / sum(trend_matrix[:,i_col])
+        return trend_matrix
+
+    def generate_queries(self):
+        queries = []
+        chosen_keywords = self._choose_keywords()
+        for week in range(*self.__weeks):
+            query_prob = self._trend_matrix(chosen_keywords)[:,week]
+            queries += list(np.random.choice(chosen_keywords, self.__n_queries_per_week, p=query_prob))
+        return queries
+
+    def frequencies(self):
+        return self.__frequencies[:,self.__weeks[0]-self.__offset:self.__weeks[1]-self.__offset]
 
     def open(self) -> 'Dataset':
         return self
