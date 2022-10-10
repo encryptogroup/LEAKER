@@ -1,7 +1,7 @@
 """
 For License information see the LICENSE file.
 
-Authors: Johannes Leupold, Amos Treiber, Michael Yonli
+Authors: Johannes Leupold, Amos Treiber, Michael Yonli, Patrick Ehrler
 
 """
 from abc import abstractmethod
@@ -13,6 +13,7 @@ from typing import List, Union, Iterable, Tuple, Iterator, Optional, Type
 from .errors import Error
 from .param import EvaluationCase, DatasetSampler, QuerySelector
 from ..api import Attack, RangeAttack, KeywordAttack, Dataset, DataSink, RangeQuerySpace, RangeDatabase
+from ..api.attack import L2KeywordDocumentAttack
 from ..util.time import Stopwatch
 
 log = getLogger(__name__)
@@ -142,6 +143,130 @@ class KeywordAttackEvaluator(Evaluator):
                 for series, user, kdr, result in performances:
                     for sink in self._sinks:
                         sink.offer_data(series, user, kdr, result)
+
+            log.info(f"RUN {run} COMPLETED IN {stopwatch.lap()}")
+
+        log.info("######################################################################################")
+        log.info(f"Evaluation completed in {stopwatch.stop()}")
+
+        for sink in self._sinks:
+            sink.flush()
+
+
+class L2KeywordDocumentAttackEvaluator(Evaluator):
+    """
+    A L2KeywordDocumentAttackEvaluator can be used to run a full evaluation of one or multiple attacks on a specific
+    dataset. It is capable of running multiple attacks in parallel to speed up the evaluation.
+
+    Parameters
+    ----------
+    evaluation_case : EvaluationCase
+        the evaluation case to run, i. e. the attacks, the data set and the number of runs for each attack
+    dataset_sampler : DatasetSampler
+        the data set sampling settings, including the known data rate values
+    sinks : Union[DataSink, Iterable[DataSink]]
+        one or multiple data sinks to write performance data to
+    parallelism : int
+        the number of parallel threads to use in the evaluation
+        default: 1
+    """
+    __dataset_sampler: DatasetSampler
+
+    def __init__(self, evaluation_case: EvaluationCase, dataset_sampler: DatasetSampler,
+                 sinks: Union[DataSink, Iterable[DataSink]], parallelism: int = 1):
+        super().__init__(evaluation_case, sinks, parallelism)
+        self.__dataset_sampler = dataset_sampler
+
+    @staticmethod
+    def __evaluate(known: Dataset, kdr: float, attack: L2KeywordDocumentAttack) -> \
+            Tuple[str, float, float, float]:
+        total_keywords = len(known.keywords())
+        total_documents = len(known.doc_ids())
+
+        # perform attack
+        recovered_keywords, recovered_documents = attack(known, known.keywords())
+
+        # count matches
+        correct_keywords = [x[0] == x[1] for x in recovered_keywords].count(True)
+
+        if recovered_documents:
+            correct_documents = [x[0] == x[1] for x in recovered_documents].count(True)
+        else:
+            correct_documents = 0
+
+        # calculate recovery rate
+        keyword_recovery_rate = correct_keywords / total_keywords
+        document_recovery_rate = correct_documents / total_documents
+
+        return attack.name(), kdr, keyword_recovery_rate, document_recovery_rate
+
+    def __to_inputs(self, dataset: Dataset, kdr: float, known: Dataset) -> Iterator[Tuple[Dataset, float, Attack]]:
+        # yield input tuples for __evaluate for each attack on the given known data set and known data rate
+        for attack in self._evaluation_case.attacks():
+            yield known, kdr, attack.create(dataset)
+
+    def __produce_input(self, pool: Optional[Pool] = None) \
+            -> Iterator[Tuple[Dataset, float, L2KeywordDocumentAttack]]:
+        # yield all input tuples for __evaluate either by using parallel computation or sequential computation, based on
+        # whether there is a multi threading pool
+        datasets = self._evaluation_case.datasets()
+        if pool is None:
+            for inputs in starmap(self.__to_inputs, self.__dataset_sampler.sample(datasets)):
+                yield from inputs
+        else:
+            for inputs in pool.starmap(self.__to_inputs, iterable=self.__dataset_sampler.sample(datasets, pool)):
+                yield from inputs
+
+    def run(self) -> None:
+        """Runs the evaluation"""
+
+        log.info(f"Running {self._evaluation_case.runs()} evaluation runs with parallelism {self._parallelism}")
+        log.info("Evaluated Attacks:")
+
+        # log and register all evaluated attacks with all sinks
+        for attack in self._evaluation_case.attacks():
+            log.info(f" - {attack.name()}")
+
+            for sink in self._sinks:
+                sink.register_series(attack.name())
+
+        reuse: bool = self.__dataset_sampler.reuse()
+
+        stopwatch = Stopwatch()
+        stopwatch.start()
+
+        # Perform desired number of runs
+        for run in range(1, self._evaluation_case.runs() + 1):
+            log.info("######################################################################################")
+            log.info(f"# RUN {run}")
+            log.info("######################################################################################")
+
+            sample_runs: int = 1
+            if reuse:
+                sample_runs: int = self._evaluation_case.runs()
+                self.__dataset_sampler.set_reuse(True)
+
+            for sample_run in range(1, sample_runs + 1):
+                log.info(f"Starting evaluation {run}-{sample_run} with new queries")
+                if self._parallelism == 1:
+                    # do evaluation sequentially
+                    performances: List[Tuple[str, float, float, float]] = []
+                    for known, kdr, attack in self.__produce_input():
+                        performances.append(L2KeywordDocumentAttackEvaluator.
+                                            __evaluate(known, kdr, attack))
+
+                else:
+                    # create thread pool and do evaluation in parallel
+                    with ThreadPool(processes=self._parallelism) as pool:
+                        performances = pool.starmap(func=L2KeywordDocumentAttackEvaluator.__evaluate,
+                                                    iterable=self.__produce_input(pool))
+                        log.info("All computations completed.")
+
+                for series, kdr, keyword_recovery_rate, document_recovery_rate in performances:
+                    for sink in self._sinks:
+                        sink.offer_data(series_id=series, known_data_rate=kdr, user_id=0,
+                                        recovery_rate=keyword_recovery_rate,
+                                        document_recovery_rate=document_recovery_rate)
 
             log.info(f"RUN {run} COMPLETED IN {stopwatch.lap()}")
 

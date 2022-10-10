@@ -5,6 +5,23 @@
 
 ---
 
+#### Included Attacks
+Currently, LEAKER includes the following attacks:
+- Range Attacks:
+    - [[LMP18]](https://eprint.iacr.org/2017/701)
+    - [[GLMP18]](https://eprint.iacr.org/2018/965)
+    - [[GLMP19]](https://eprint.iacr.org/2019/011)
+    - [[GJW19]](https://eprint.iacr.org/2019/1198)
+    - [[KPT20]](https://eprint.iacr.org/2019/441)
+    - [[KPT21]](https://eprint.iacr.org/2021/093.pdf)
+- Keyword Attacks:
+    - [[IKK12]](https://www.ndss-symposium.org/ndss2012/ndss-2012-programme/access-pattern-disclosure-searchable-encryption-ramification-attack-and-mitigation/)
+    - [[CGPR15]](https://eprint.iacr.org/2016/718)
+    - [[BKM20]](https://eprint.iacr.org/2019/1175)
+    - [[RPH21]](https://doi.org/10.1007/978-3-030-78375-4_7)
+    - [[NHP+21]](https://doi.org/10.1145/3460120.3484540)
+---
+
 #### Requirements
 The framework has been written in Python 3.8. To install all requirements, you can use the `requirements.txt` file:
 
@@ -35,7 +52,7 @@ output of evaluations (`data/figures`).
 * `data_sources` is a folder to input in the raw data to be indexed by LEAKER. Our examples and evaluation scripts use it, but
 you can use any input directory with LEAKER.
 * `evaluations` contains the scripts to replicate the experiments in our paper. The `GOOGLE_README.txt` contains the
-instructions given to the participants that evaluated attacks on their private Google data.
+instructions given to the participants that evaluated attacks on their private Google data. `leap_experiment.py` contains the reproduction of the LEAP experiment.
 * `examples.py` contains simple examples to show the usage of LEAKER.
 * `leaker` contains the core LEAKER module.
 * `tests` contains tests.
@@ -45,7 +62,7 @@ instructions given to the participants that evaluated attacks on their private G
 #### Usage
 Refer to `examples.py` to see how to use LEAKER.
 First, you need to download/extract the raw data into a corresponding subdirectory of `data_sources`. Then, you can index
-this data source (necessary only once) and load it with LEAKER to perform evaluations. 
+this data source (necessary only once) and load it with LEAKER to perform evaluations.
 
 To generate the documentation: enter `pdoc --html leaker` with LEAKER/ as the current working directory.
 
@@ -53,7 +70,7 @@ To generate the documentation: enter `pdoc --html leaker` with LEAKER/ as the cu
 
 #### Acknowledgements
 
-This framework has been developed by Abdelkarim Kati, Johannes Leupold, Tobias Stöckert, Amos Treiber, and Michael Yonli.
+This framework has been developed by Patrick Ehrler, Abdelkarim Kati, Johannes Leupold, Tobias Stöckert, Amos Treiber, and Michael Yonli.
 
 The framework also uses [code by Ruben Groot Roessink](https://github.com/rubengrootroessink/IKK-query-recovery-attack) for its IKK attack optimization, which is located in the folder `ikk_roessink` and released under the
 license `ikk_roessink/LICENSE.MD`.

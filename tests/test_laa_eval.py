@@ -1,7 +1,7 @@
 """
 For License information see the LICENSE file.
 
-Authors: Abdelkarim Kati, Amos Treiber, Michael Yonli
+Authors: Abdelkarim Kati, Amos Treiber, Michael Yonli, Patrick Ehrler
 
 """
 import logging
@@ -19,6 +19,7 @@ from leaker.attack import SubgraphVL, VolAn, SelVolAn, SubgraphID, Countv2, LMPr
     LMPaux, ApproxOrder, GJWbasic, GJWspurious, GJWmissing, GLMP18, LMPappRec, Arrorder, GJWpartial, \
     RangeCountBaselineAttack, Apa
 from leaker.attack.kkno import GeneralizedKKNO
+from leaker.attack.leap import Leap
 from leaker.attack.query_space import MissingBoundedRangeQuerySpace, ShortRangeQuerySpace, \
     ValueCenteredRangeQuerySpace, PermutedBetaRangeQuerySpace, PartialQuerySpace, UniformRangeQuerySpace, \
     BoundedRangeQuerySpace
@@ -26,7 +27,8 @@ from leaker.evaluation import KeywordAttackEvaluator, RangeAttackEvaluator, Eval
     QuerySelector
 from leaker.evaluation.errors import MAError, MaxASymError, MaxABucketError, CountSError, CountAError, \
     CountPartialVolume, MSError, SetCountAError, OrderedMAError
-from leaker.extension import VolumeExtension
+from leaker.evaluation.evaluator import L2KeywordDocumentAttackEvaluator
+from leaker.extension import VolumeExtension, DocOccurrenceExtension
 from leaker.preprocessing import Preprocessor, Filter, Sink
 from leaker.preprocessing.data import DirectoryEnumerator, RelativeFile, FileLoader, FileToDocument, \
     PlainFileParser
@@ -64,6 +66,26 @@ class EvaluatorTestSink(DataSink):
 
     def offer_data(self, series_id: str, user_id: int, kdr: float, rr: float) -> None:
         self.__cb(series_id, kdr, rr, self.__n)
+        self.__n += 1
+
+    def flush(self) -> None:
+        pass
+
+
+class KeywordDocumentEvaluatorTestSink(DataSink):
+    __n: int
+    __cb: Callable[[str, int, float, float, float, int], None]
+
+    def __init__(self, callback: Callable[[str, int, float, float, float, int], None]):
+        self.__n = 0
+        self.__cb = callback
+
+    def register_series(self, series_id: str, user_ids: int = 1) -> None:
+        pass
+
+    def offer_data(self, series_id: str, user_id: int, known_data_rate: float, recovery_rate: float,
+                   document_recovery_rate: float = 0.0) -> None:
+        self.__cb(series_id, known_data_rate, recovery_rate, document_recovery_rate, self.__n)
         self.__n += 1
 
     def flush(self) -> None:
@@ -123,6 +145,38 @@ def test_keyword_attack():
                                                               allow_repetition=False),
                                  sinks=verifier,
                                  parallelism=8)
+
+    run.run()
+
+
+def test_leap_attack():
+    init_rngs(1)
+
+    backend = WhooshBackend()
+    if not backend.has('random_words'):
+        test_indexing()
+    random_words = backend.load_dataset('random_words').extend_with(DocOccurrenceExtension)
+
+    kdr_values = [1.0, 0.75, 0.5, 0.25]
+
+    def verif_cb(series_id: str, kdr: float, rr: float, rr_doc: float, n: int) -> None:
+        assert series_id == 'Leap'
+        assert kdr_values[n] == kdr
+
+        # exact results can not be tested, because reduction to known dataset is non-deterministic
+        assert rr >= 0.0
+        assert rr <= 1.0
+        assert rr_doc >= 0.0
+        assert rr_doc <= 1.0
+
+    verifier = KeywordDocumentEvaluatorTestSink(verif_cb)
+
+    run = L2KeywordDocumentAttackEvaluator(evaluation_case=EvaluationCase(attacks=[Leap],
+                                                                          dataset=random_words, runs=1),
+                                           dataset_sampler=DatasetSampler(kdr_samples=[0.25, 0.5, 0.75, 1.0],
+                                                                          reuse=True,
+                                                                          monotonic=False), sinks=verifier,
+                                           parallelism=8)
 
     run.run()
 
@@ -262,7 +316,7 @@ def test_range_attack_arr_shortranges():
                                                               runs=1,
                                                               error=MSError),
                                range_queries=ShortRangeQuerySpace(db, 10 ** 4, allow_repetition=False,
-                                                                    allow_empty=False),
+                                                                  allow_empty=False),
                                query_counts=[10 ** 4],
                                sinks=verifier,
                                parallelism=8, normalize=False)
@@ -284,7 +338,7 @@ def test_range_attack_arr_valuecentered():
                                                               runs=1,
                                                               error=MSError),
                                range_queries=ValueCenteredRangeQuerySpace(db, 5 * 10 ** 4, allow_repetition=False,
-                                                                    allow_empty=False),
+                                                                          allow_empty=False),
                                query_counts=[5 * 10 ** 4],
                                sinks=verifier,
                                parallelism=8, normalize=False)
@@ -395,7 +449,7 @@ def test_gjwpartial():
 
 
 def test_regular_schemes():
-    big_n = 2**10
+    big_n = 2 ** 10
     init_rngs(1)
 
     vals = RandomRangeDatabase("test", 1, big_n, density=.5, allow_repetition=True).get_numerical_values()
@@ -403,13 +457,12 @@ def test_regular_schemes():
     assert db1.num_canonical_queries() == sum(big_n - 2 ** i + 1 for i in range(int(math.log2(big_n)) + 1))
 
     db2 = ABTRangeDatabase("test", values=vals)
-    assert db2.num_canonical_queries() == 2*(2*big_n - 1) - math.log2(big_n) - big_n
+    assert db2.num_canonical_queries() == 2 * (2 * big_n - 1) - math.log2(big_n) - big_n
 
     db3 = BTRangeDatabase("test", values=vals)
-    assert db3.num_canonical_queries() == 2*big_n - 1
+    assert db3.num_canonical_queries() == 2 * big_n - 1
 
     for db in [db1, db2, db3]:
-
         def verif_cb(series_id: str, kdr: float, rr: float, n: int) -> None:
             pass
 
@@ -429,11 +482,10 @@ def test_regular_schemes():
 def test_range_attack_apa():
     init_rngs(1)
 
-    db = PermutedBetaRandomRangeDatabase("test", 1, 2**10, .1)
+    db = PermutedBetaRandomRangeDatabase("test", 1, 2 ** 10, .1)
     values = db.get_numerical_values()
 
     for db in [ABTRangeDatabase("test", values=values), BTRangeDatabase("test", values=values)]:
-
         def verif_cb(series_id: str, kdr: float, rr: float, n: int) -> None:
             print(f"rr: {rr}")
             assert 1 < rr < 40
@@ -453,8 +505,7 @@ def test_range_attack_apa():
 
 
 def test_big_q_calculation():
-
-    db = PermutedBetaRandomRangeDatabase("test", 1, 2**10, .05)
+    db = PermutedBetaRandomRangeDatabase("test", 1, 2 ** 10, .05)
     values = db.get_numerical_values()
 
     abt = ABTRangeDatabase("test0", values=values)
@@ -464,4 +515,3 @@ def test_big_q_calculation():
     assert abt.num_canonical_queries() == 3060
     assert bt.num_canonical_queries() == 2047
     assert base.num_canonical_queries() == 9228
-

@@ -1,3 +1,4 @@
+from .dococcurrence import DocOccurrenceExtension
 from .identity import IdentityExtension
 from .selectivity import SelectivityExtension
 from .volume import VolumeExtension
@@ -10,5 +11,7 @@ __all__ = [
 
     'VolumeExtension',  # volume.py
 
-    'CoOccurrenceExtension', # cooccurrence.py
+    'CoOccurrenceExtension',  # cooccurrence.py
+
+    'DocOccurrenceExtension',  # dococcurrence.py
 ]
