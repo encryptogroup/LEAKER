@@ -75,7 +75,7 @@ class IdentityExtension(Extension, ABC):
             log.info(f"Loading Cache for '{dataset.name()}' complete")
 
     def sample(self, dataset: Dataset) -> 'IdentityExtension':
-        return IdentityExtension(dataset, dataset.doc_ids(), dataset.keywords(), self._identity_cache)
+        return type(self).extend(dataset, dataset.doc_ids(), dataset.keywords(), self._identity_cache)
 
     def get_identity_cache(self) -> Cache[str, Set[str]]:
         return self._identity_cache
