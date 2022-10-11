@@ -16,6 +16,9 @@ from leaker.attack import Countv2, Sap, PartialQuerySpace, PartialQueryLogSpace,
 from leaker.attack.query_space import AuxiliaryKnowledgeQuerySpace
 from leaker.evaluation import KnownDatasetSampler, SampledDatasetSampler, EvaluationCase, QuerySelector, KeywordAttackEvaluator, MAError, \
     RangeAttackEvaluator
+from leaker.extension.selectivity import SelectivityExtension
+from leaker.extension.volume import VolumeExtension
+from leaker.pattern.cooccurrence import CoOccurrence
 from leaker.plotting import KeywordMatPlotLibSink, RangeMatPlotLibSink
 from leaker.preprocessing import Filter, Sink, Preprocessor
 from leaker.preprocessing.data import DirectoryEnumerator, RelativeFile, FileLoader, EMailParser, FileToDocument, \
@@ -42,19 +45,27 @@ and settings are not covered (see the evaluations and tests for a more comprehen
 
 # ----- 1: Keyword Attack Evaluation -----#
 
-debian_list = DirectoryEnumerator("../Debian")
+# debian_list = DirectoryEnumerator("../Debian")
 
-debian_filter: Filter[RelativeFile, InputDocument] = FileLoader(DebianMailParser()) | FileToDocument()
-debian_sink: Sink[InputDocument] = WhooshWriter("debian_data")
+# debian_filter: Filter[RelativeFile, InputDocument] = FileLoader(DebianMailParser()) | FileToDocument()
+# debian_sink: Sink[InputDocument] = WhooshWriter("debian_data")
 
-preprocessor = Preprocessor(debian_list, [debian_filter > debian_sink])
-preprocessor.run()
+# preprocessor = Preprocessor(debian_list, [debian_filter > debian_sink])
+# preprocessor.run()
 
-backend_d = WhooshBackend()
-debian_db: Dataset = backend_d.load_dataset("debian_data")
+# backend_d = WhooshBackend()
+# debian_db: Dataset = backend_d.load_dataset("debian_data")
 
-log.info(f"Loaded {debian_db.name()} data. {len(debian_db)} documents with {len(debian_db.keywords())} words.")
+# log.info(f"Loaded {debian_db.name()} data. {len(debian_db)} documents with {len(debian_db.keywords())} words.")
+# # debian_db_restricted = debian_db.restrict_keyword_size(25,Selectivity.High)
+# # log.info(f"{debian_db_restricted.name()} now contains {len(debian_db_restricted)} documents with "
+# #          f"{len(debian_db_restricted.keywords())} words.")
+# print("Debian")
+# debian_kw = list(debian_db.keywords())
+# debian_sorted = sorted(debian_kw,key=lambda kw: debian_db.selectivity(kw),reverse=True)
+# debian_sorted = [(kw,debian_db.selectivity(kw)) for kw in debian_sorted]
 
+# print(debian_sorted[:100])
 
 # ubuntu_list = DirectoryEnumerator("../Ubuntu")
 
@@ -64,11 +75,147 @@ log.info(f"Loaded {debian_db.name()} data. {len(debian_db)} documents with {len(
 # preprocessor = Preprocessor(ubuntu_list, [ubuntu_filter > ubuntu_sink])
 # preprocessor.run()
 
-backend_u = WhooshBackend()
-ubuntu_db: Dataset = backend_u.load_dataset("ubuntu_data")
 
-log.info(f"Loaded {ubuntu_db.name()} data. {len(ubuntu_db)} documents with {len(ubuntu_db.keywords())} words.")
+# backend_u = WhooshBackend()
+# ubuntu_db: Dataset = backend_u.load_dataset("ubuntu_data")
 
+# log.info(f"Loaded {ubuntu_db.name()} data. {len(ubuntu_db)} documents with {len(ubuntu_db.keywords())} words.")
+# # ubuntu_db_restricted = ubuntu_db.restrict_keyword_size(25,Selectivity.High)
+# # log.info(f"{ubuntu_db_restricted.name()} now contains {len(ubuntu_db_restricted)} documents with "
+# #          f"{len(ubuntu_db_restricted.keywords())} words.")
+# ubuntu_kw = list(ubuntu_db.keywords())
+
+# ubuntu_sorted = sorted(ubuntu_kw,key=lambda kw: ubuntu_db.selectivity(kw),reverse=True)
+# ubuntu_sorted = [(kw,ubuntu_db.selectivity(kw)) for kw in ubuntu_sorted]
+# print("Ubuntu")
+# print(ubuntu_sorted[:100])
+
+
+# enron_dir = DirectoryEnumerator("data_sources/Enron/maildir")
+# enron_sent_filter: Filter[RelativeFile, InputDocument] = RelativeContainsFilter("_sent_mail/") | FileLoader(EMailParser()) | FileToDocument()
+# enron_sent_sink: Sink[InputDocument] = WhooshWriter("enron_sent")
+# preprocessor = Preprocessor(enron_dir, [enron_sent_filter > enron_sent_sink])
+# preprocessor.run()
+
+backend = WhooshBackend()
+enron_db: Dataset = backend.load_dataset("enron_sent")
+
+log.info(f"Loaded {enron_db.name()} data. {len(enron_db)} documents with {len(enron_db.keywords())} words.")
+# enron_db_restricted = enron_db.restrict_keyword_size(25,Selectivity.High)
+
+# enron_kw = list(enron_db.keywords())
+# enron_sorted = sorted(enron_kw,key=lambda kw: enron_db.selectivity(kw), reverse=True)
+# enron_sorted = [(kw,enron_db.selectivity(kw)) for kw in enron_sorted]
+# print("Enron")
+# print(enron_sorted[:100])
+
+# kw_dict = {'debian':debian_sorted, 'ubuntu':ubuntu_sorted, 'enron':enron_sorted}
+
+# pkl.dump(kw_dict, open("/home/user/Documents/LEAKER/statistics.pkl", "wb"))
+
+# enron_db_restricted_10 = enron_db.restrict_keyword_size(2500,Selectivity.High)
+# enron_db_restricted_100 = enron_db.restrict_keyword_size(5000,Selectivity.High)
+# enron_db_restricted_1000 = enron_db.restrict_keyword_size(7500,Selectivity.High)
+# enron_db_restricted_10000 = enron_db.restrict_keyword_size(12500,Selectivity.High)
+# enron_db_restricted_20000 = enron_db.restrict_keyword_size(15000,Selectivity.High)
+# enron_db_restricted_200001 = enron_db.restrict_keyword_size(17500,Selectivity.High)
+
+# # log.info(f"{enron_db_restricted.name()} now contains {len(enron_db_restricted)} documents with "
+# #          f"{len(enron_db_restricted.keywords())} words.")
+# enron_kw = enron_db.keywords()
+# enron_db.extend_with(VolumeExtension)
+# dataset_sampler = SampledDatasetSampler(kdr_samples=[0.5])
+# result = list(dataset_sampler.sample([enron_db]))
+# enron_kw_test = list(result[0][0].keywords())
+# enron_kw_train = list(result[0][2].keywords())
+# enron_test_sorted = sorted(enron_kw_test,key=lambda kw: result[0][0].selectivity(kw), reverse=True)
+# enron_train_sorted = sorted(enron_kw_train,key=lambda kw: result[0][2].selectivity(kw), reverse=True)
+# co = CoOccurrence()
+# print(co(result[0][0],enron_kw_test))
+# enron_test = []
+# enron_train = []
+# enron_rs_2500 = []
+# enron_rs_5000 = []
+# enron_rs_7500 = []
+# enron_rs_12500 = []
+# enron_rs_15000 = []
+# enron_rs_17500 = []
+# i=0
+# for i in range(10):
+#     print("Iteration", i)
+#     result = list(dataset_sampler.sample([enron_db]))
+
+#     enron_kw_test = list(result[0][0].keywords())
+#     enron_kw_train = list(result[0][2].keywords())
+#     enron_test_sorted = sorted(enron_kw_test,key=lambda kw: result[0][0].selectivity(kw), reverse=True)
+#     enron_train_sorted = sorted(enron_kw_train,key=lambda kw: result[0][2].selectivity(kw), reverse=True)
+#     enron_test.append([(kw,result[0][0].selectivity(kw)) for kw in enron_test_sorted])
+#     enron_train.append([(kw,result[0][2].selectivity(kw)) for kw in enron_train_sorted])
+#     result = list(dataset_sampler.sample([enron_db]))
+#     result_10 = list(dataset_sampler.sample([enron_db_restricted_10]))
+#     result_100 = list(dataset_sampler.sample([enron_db_restricted_100]))
+#     result_1000 = list(dataset_sampler.sample([enron_db_restricted_1000]))
+#     result_10000 = list(dataset_sampler.sample([enron_db_restricted_10000]))
+#     result_20000 = list(dataset_sampler.sample([enron_db_restricted_20000]))
+#     result_200001 = list(dataset_sampler.sample([enron_db_restricted_200001]))
+    
+#     enron_kw_test = list(result[0][0].keywords())
+#     enron_kw_train = list(result[0][2].keywords())
+#     enron_test_sorted = sorted(enron_kw_test,key=lambda kw: result[0][0].selectivity(kw), reverse=True)
+#     enron_train_sorted = sorted(enron_kw_train,key=lambda kw: result[0][2].selectivity(kw), reverse=True)
+#     enron_test.append([(kw,result[0][0].selectivity(kw)) for kw in enron_test_sorted])
+#     enron_train.append([(kw,result[0][2].selectivity(kw)) for kw in enron_train_sorted])
+
+#     print("Restrict 2500 then sample")
+#     kw1 = result_10[0][0].keywords()
+#     kw2 = result_10[0][2].keywords()
+#     intersect = len(kw1.intersection(kw2))
+#     enron_rs_2500.append(intersect)
+#     print(intersect)
+
+#     print("Restrict 5000 then sample")
+#     kw1 = result_100[0][0].keywords()
+#     kw2 = result_100[0][2].keywords()
+#     intersect = len(kw1.intersection(kw2))
+#     enron_rs_5000.append(intersect)
+#     print(intersect)
+   
+#     print("Restrict 7500 then sample")
+#     kw1 = result_1000[0][0].keywords()
+#     kw2 = result_1000[0][2].keywords()
+#     intersect = len(kw1.intersection(kw2))
+#     enron_rs_7500.append(intersect)
+#     print(intersect)
+    
+#     print("Restrict 12500 then sample")
+#     kw1 = result_10000[0][0].keywords()
+#     kw2 = result_10000[0][2].keywords()
+#     intersect = len(kw1.intersection(kw2))
+#     enron_rs_12500.append(intersect)
+#     print(intersect)
+    
+#     print("Restrict 15000 then sample")
+#     kw1 = result_20000[0][0].keywords()
+#     kw2 = result_20000[0][2].keywords()
+#     intersect = len(kw1.intersection(kw2))
+#     enron_rs_15000.append(intersect)
+#     print(intersect)
+
+#     print("Restrict 17500 then sample")
+#     kw1 = result_200001[0][0].keywords()
+#     kw2 = result_200001[0][2].keywords()
+#     intersect = len(kw1.intersection(kw2))
+#     enron_rs_17500.append(intersect)
+#     print(intersect)
+    
+#     i += 1
+
+# enron_dict = {'test':enron_test, 'train':enron_train}
+# enron_rs = {'2500':enron_rs_2500,'5000':enron_rs_5000,'7500':enron_rs_7500,'12500':enron_rs_12500,'15000':enron_rs_15000,'17500':enron_rs_17500}
+
+# pkl.dump(enron_dict, open("/home/user/Documents/LEAKER/enron_test_train.pkl", "wb"))
+# pkl.dump(enron_rs, open("/home/user/Documents/LEAKER/enron_rs.pkl", "wb"))
+#print(len(enron_kw.intersection(debian_kw)))
 # ###### PRE-PROCESSING ######
 # # To use LEAKER, the data source you want to use needs to be pre-processed and indexed *once* for later use.
 # # Let's start with the Enron keyword dataset, available at https://www.cs.cmu.edu/~./enron/.

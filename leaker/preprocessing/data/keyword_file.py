@@ -532,6 +532,10 @@ class EMailParser(FileParser):
             return True
         elif "[IMAGE]" in line:
             return True
+        elif match(r"^http[s]*://.*.ubuntu.com.*$", line) is not None:
+            return True
+        elif match(r"^Ubuntu Security Notice", line) is not None:
+            return True
         elif match(r"^http[s]*://.*.debian.org.*$", line) is not None:
             return True
         elif match(r"^Debian Security Advisory",line) is not None:
@@ -539,6 +543,8 @@ class EMailParser(FileParser):
         elif "MD5 checksum" in line or "MD5Dum" in line:
             return True
         elif match(r"^\w{3,9}?\s\d{1,2}?,\s\d{4}?",line) is not None:
+            return True
+        elif "=====" in line:
             return True
         return False
 
@@ -593,9 +599,13 @@ class UbuntuMailParser(EMailParser):
     def parse(self, f: TextIO) -> Iterator[Tuple[str, str, str]]:
         m: str = ""
         i: int = 0
+        skip = False
         for l in f:
+            if re.match(r"^\s*Source archives:",l):
+                skip = True
             if re.match(r"^From .*@.*$", l):
                 """New email"""
+                skip = False
                 mail = email.message_from_string(m)
                 payload: str = ""
                 if mail.is_multipart():
@@ -615,7 +625,8 @@ class UbuntuMailParser(EMailParser):
                 m = ""
                 yield (str(i),
                        " ".join([line for line in payload.split("\n") if not UbuntuMailParser._filtered(line.strip())]), "")
-
+            elif skip:
+                continue
             else:
                 """Line belongs to prior email"""
                 m += l
