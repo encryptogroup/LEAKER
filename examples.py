@@ -53,13 +53,13 @@ and settings are not covered (see the evaluations and tests for a more comprehen
 # preprocessor = Preprocessor(debian_list, [debian_filter > debian_sink])
 # preprocessor.run()
 
-# backend_d = WhooshBackend()
-# debian_db: Dataset = backend_d.load_dataset("debian_data")
+backend_d = WhooshBackend()
+debian_db: Dataset = backend_d.load_dataset("debian_data")
 
-# log.info(f"Loaded {debian_db.name()} data. {len(debian_db)} documents with {len(debian_db.keywords())} words.")
-# # debian_db_restricted = debian_db.restrict_keyword_size(25,Selectivity.High)
-# # log.info(f"{debian_db_restricted.name()} now contains {len(debian_db_restricted)} documents with "
-# #          f"{len(debian_db_restricted.keywords())} words.")
+log.info(f"Loaded {debian_db.name()} data. {len(debian_db)} documents with {len(debian_db.keywords())} words.")
+# debian_db_restricted = debian_db.restrict_keyword_size(25,Selectivity.High)
+# log.info(f"{debian_db_restricted.name()} now contains {len(debian_db_restricted)} documents with "
+#          f"{len(debian_db_restricted.keywords())} words.")
 # print("Debian")
 # debian_kw = list(debian_db.keywords())
 # debian_sorted = sorted(debian_kw,key=lambda kw: debian_db.selectivity(kw),reverse=True)
@@ -76,13 +76,13 @@ and settings are not covered (see the evaluations and tests for a more comprehen
 # preprocessor.run()
 
 
-# backend_u = WhooshBackend()
-# ubuntu_db: Dataset = backend_u.load_dataset("ubuntu_data")
+backend_u = WhooshBackend()
+ubuntu_db: Dataset = backend_u.load_dataset("ubuntu_data")
 
-# log.info(f"Loaded {ubuntu_db.name()} data. {len(ubuntu_db)} documents with {len(ubuntu_db.keywords())} words.")
-# # ubuntu_db_restricted = ubuntu_db.restrict_keyword_size(25,Selectivity.High)
-# # log.info(f"{ubuntu_db_restricted.name()} now contains {len(ubuntu_db_restricted)} documents with "
-# #          f"{len(ubuntu_db_restricted.keywords())} words.")
+log.info(f"Loaded {ubuntu_db.name()} data. {len(ubuntu_db)} documents with {len(ubuntu_db.keywords())} words.")
+# ubuntu_db_restricted = ubuntu_db.restrict_keyword_size(25,Selectivity.High)
+# log.info(f"{ubuntu_db_restricted.name()} now contains {len(ubuntu_db_restricted)} documents with "
+#          f"{len(ubuntu_db_restricted.keywords())} words.")
 # ubuntu_kw = list(ubuntu_db.keywords())
 
 # ubuntu_sorted = sorted(ubuntu_kw,key=lambda kw: ubuntu_db.selectivity(kw),reverse=True)
@@ -101,7 +101,7 @@ backend = WhooshBackend()
 enron_db: Dataset = backend.load_dataset("enron_sent")
 
 log.info(f"Loaded {enron_db.name()} data. {len(enron_db)} documents with {len(enron_db.keywords())} words.")
-# enron_db_restricted = enron_db.restrict_keyword_size(25,Selectivity.High)
+enron_db_restricted = enron_db.restrict_keyword_size(500,Selectivity.High)
 
 # enron_kw = list(enron_db.keywords())
 # enron_sorted = sorted(enron_kw,key=lambda kw: enron_db.selectivity(kw), reverse=True)
@@ -276,53 +276,53 @@ log.info(f"Loaded {enron_db.name()} data. {len(enron_db)} documents with {len(en
 # # For the range case, you can similarly use a RangeBackend.
 
 # ###### EVALUATION ######
-# # queries_obs_file = open("/home/user/Documents/LEAKER/LEAKER/data_sources/Google_Trends/queries_obs.pkl",'rb')
-# # query_log_obs = DummyKeywordQueryLogFromList("queries_obs", pkl.load(queries_obs_file))
-# # queries_real_file = open("/home/user/Documents/LEAKER/LEAKER/data_sources/Google_Trends/queries_real.pkl",'rb')
-# # query_log_real = DummyKeywordQueryLogFromList("queries_obs", pkl.load(queries_real_file))
-# data: dict = None
-# with open("/home/user/Documents/LEAKER/LEAKER/data_sources/Google_Trends/aux_knowledge.pkl",'rb') as f:
-#     data = pkl.load(f)
+# queries_obs_file = open("/home/user/Documents/LEAKER/LEAKER/data_sources/Google_Trends/queries_obs.pkl",'rb')
+# query_log_obs = DummyKeywordQueryLogFromList("queries_obs", pkl.load(queries_obs_file))
+# queries_real_file = open("/home/user/Documents/LEAKER/LEAKER/data_sources/Google_Trends/queries_real.pkl",'rb')
+# query_log_real = DummyKeywordQueryLogFromList("queries_obs", pkl.load(queries_real_file))
+data: dict = None
+with open("/home/user/Documents/LEAKER/LEAKER/data_sources/Google_Trends/aux_knowledge.pkl",'rb') as f:
+    data = pkl.load(f)
 
-# keyword_trends: dict = None
-# with open("/home/user/Documents/LEAKER/enron_db.pkl",'rb') as f:
-#     _, keyword_trends = pkl.load(f)
+keyword_trends: dict = None
+with open("/home/user/Documents/LEAKER/enron_db.pkl",'rb') as f:
+    _, keyword_trends = pkl.load(f)
 
-# #query_log = DummyKeywordQueryLogFromList("queries_cli", data['queries'])
-# query_log = DummyKeywordQueryLogFromTrends("trends_querylog", keyword_trends,100,(210,260),5,5,Selectivity.Independent)
-# query_space = AuxiliaryKnowledgeQuerySpace#PartialQueryLogSpace
+#query_log = DummyKeywordQueryLogFromList("queries_cli", data['queries'])
+query_log = DummyKeywordQueryLogFromTrends("trends_querylog", keyword_trends,100,(210,260),5,5,Selectivity.Independent)
+query_space = AuxiliaryKnowledgeQuerySpace#PartialQueryLogSpace
 
-# # We can evaluate according to many criteria:
-# print(data['frequencies'].shape)
-# attacks = [Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.keywords_list())]  # the attacks to evaluate
-# runs = 1  # Amount of evaluations
+# We can evaluate according to many criteria:
+print(data['frequencies'].shape)
+attacks = [Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.keywords_list())]  # the attacks to evaluate
+runs = 1  # Amount of evaluations
 
-# # From this, we can construct a simple EvaluationCase:
-# evaluation_case = EvaluationCase(attacks=attacks, dataset=ubuntu_db,runs=runs)#enron_db_restricted, runs=runs)
+# From this, we can construct a simple EvaluationCase:
+evaluation_case = EvaluationCase(attacks=attacks, dataset=ubuntu_db,runs=runs)#enron_db_restricted, runs=runs)
 
-# kdr = [.5]  # known data rates
-# reuse = True  # If we reuse sampled datasets a number of times (=> we will have a 5x5 evaluation here)
-# # From this, we can construct a DatasetSampler:
-# dataset_sampler = SampledDatasetSampler(kdr_samples=kdr, reuse=reuse)
-# # The query space to populate. Here, we use partial sampling from
-# # the data collection. With a query log, a QueryLogSpace is used.
-# sel = Selectivity.High  # When sampling queries, we use high selectivity keywords
-# qsp_size = 100  # Size of the query space
-# sample_size = 100  # Amount of queries attacked at a time (sampled from the query space)
-# allow_repetition = True  # If queries can repeat
-# # From this, we can construct a QuerySelector:
-# query_selector = QuerySelector(query_space=query_space, selectivity=sel, query_space_size=qsp_size, queries=sample_size,
-#                                allow_repetition=allow_repetition, query_log=query_log)
+kdr = [.5]  # known data rates
+reuse = True  # If we reuse sampled datasets a number of times (=> we will have a 5x5 evaluation here)
+# From this, we can construct a DatasetSampler:
+dataset_sampler = SampledDatasetSampler(kdr_samples=kdr, reuse=reuse)
+# The query space to populate. Here, we use partial sampling from
+# the data collection. With a query log, a QueryLogSpace is used.
+sel = Selectivity.High  # When sampling queries, we use high selectivity keywords
+qsp_size = 100  # Size of the query space
+sample_size = 100  # Amount of queries attacked at a time (sampled from the query space)
+allow_repetition = True  # If queries can repeat
+# From this, we can construct a QuerySelector:
+query_selector = QuerySelector(query_space=query_space, selectivity=sel, query_space_size=qsp_size, queries=sample_size,
+                               allow_repetition=allow_repetition, query_log=query_log)
 
-# out_file = "sap_50-50_Sampled_Data_vol.png"  # Output file (if desired), will be stored in data/figures
+out_file = "sap_50-50_Sampled_Data_vol.png"  # Output file (if desired), will be stored in data/figures
 
-# # With these parameters, we can set up the Evaluator:
-# eva = KeywordAttackEvaluator(evaluation_case=evaluation_case, dataset_sampler=dataset_sampler,
-#                              query_selector=query_selector,
-#                              sinks=KeywordMatPlotLibSink(out_file=out_file), parallelism=8)
+# With these parameters, we can set up the Evaluator:
+eva = KeywordAttackEvaluator(evaluation_case=evaluation_case, dataset_sampler=dataset_sampler,
+                             query_selector=query_selector,
+                             sinks=KeywordMatPlotLibSink(out_file=out_file), parallelism=8)
 
-# # And then run it:
-# eva.run()
+# And then run it:
+eva.run()
 
 # # # ----- 2: Range Attack Evaluation -----#
 # # # As mentioned, pre-processing and loading range data works similarly to the keyword case.

@@ -601,9 +601,10 @@ class UbuntuMailParser(EMailParser):
         i: int = 0
         skip = False
         for l in f:
-            if re.match(r"^\s*Source archives:",l):
+            #print(l)
+            if re.match(r"^\s*Source archives:$",l) or re.match(r"^-------------- next part --------------$",l) or re.match(r"^Update instructions:$",l):
                 skip = True
-            if re.match(r"^From .*@.*$", l):
+            if re.match(r"^From .*\sat\s.*$", l):
                 """New email"""
                 skip = False
                 mail = email.message_from_string(m)
@@ -643,7 +644,7 @@ class DebianMailParser(EMailParser):
         skip = False
         f = iter(f)
         for l in f:
-            if (re.match(r"^Debian GNU/Linux",l) and "-------" in next(f)) or re.match(r"^-----BEGIN PGP SIGNATURE-----$",l):
+            if (re.match(r"^Debian GNU/Linux",l) and "-------" in next(f)) or re.match(r"^-----BEGIN PGP SIGNATURE-----$",l) or re.match(r"^Upgrade Instructions$",l):
                 skip = True
 
             if re.match(r"^-----BEGIN PGP SIGNED MESSAGE-----$", l):
