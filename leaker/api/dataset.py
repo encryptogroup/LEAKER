@@ -483,14 +483,17 @@ class DummyKeywordQueryLogFromTrends(KeywordQueryLog):
         self.__name = name
         self.__keywords_list = list(keywords_trends.keys())
         self.__keywords_trends = keywords_trends
-        self.__frequencies = self._trend_matrix()
-        assert n_kw <= len(self.__keywords_list), f"The number of keywords to choose has to be smaller than {len(self.__keywords_list)}."
-        self.__n_kw = n_kw
         assert offset >=0 and weeks[0]-offset >=0 and weeks[0] < weeks[1] and weeks[1] <= len(keywords_trends), f"The weeks can only range from 0 to {len(keywords_trends)}"
         self.__weeks = weeks
         self.__offset = offset
         self.__selectivity = selectivity
         self.__n_queries_per_week = n_queries_per_week
+        assert n_kw <= len(self.__keywords_list), f"The number of keywords to choose has to be smaller than {len(self.__keywords_list)}."
+        self.__n_kw = n_kw
+        self.__frequencies = self._trend_matrix()
+        
+        
+        
 
     def name(self) -> str:
         return self.__name
@@ -506,7 +509,6 @@ class DummyKeywordQueryLogFromTrends(KeywordQueryLog):
         return self.__chosen_keywords
     
     def _choose_keywords(self):
-        print("chose keywords")
         if self.__selectivity == Selectivity.High:
             chosen_keywords = sorted(self.__keywords_trends.keys(), key=lambda x: self.__keywords_trends[x]['count'], reverse=True)[:self.__n_kw]
         elif self.__selectivity == Selectivity.Low:
@@ -520,7 +522,9 @@ class DummyKeywordQueryLogFromTrends(KeywordQueryLog):
     
     def _trend_matrix(self,chosen_keywords:list=None):
         if chosen_keywords is None:
-            chosen_keywords = self.__keywords_trends.keys()
+            chosen_keywords = self._choose_keywords()
+            # chosen_keywords = list(self.__keywords_trends.keys())
+            # self.__chosen_keywords = chosen_keywords
         trend_matrix = np.array([self.__keywords_trends[kw]['trend'] for kw in chosen_keywords])
         n_kw, n_weeks = trend_matrix.shape
         for i_col in range(n_weeks):
@@ -532,7 +536,9 @@ class DummyKeywordQueryLogFromTrends(KeywordQueryLog):
 
     def generate_queries(self):
         queries = []
-        chosen_keywords = self._choose_keywords()
+        if self.__chosen_keywords is None:
+            chosen_keywords = self._choose_keywords()
+        else: chosen_keywords = self.__chosen_keywords
         for week in range(*self.__weeks):
             query_prob = self._trend_matrix(chosen_keywords)[:,week]
             queries += list(np.random.choice(chosen_keywords, self.__n_queries_per_week, p=query_prob))

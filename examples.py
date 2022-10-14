@@ -54,9 +54,9 @@ and settings are not covered (see the evaluations and tests for a more comprehen
 # preprocessor.run()
 
 backend_d = WhooshBackend()
-debian_db: Dataset = backend_d.load_dataset("debian_data")
+# debian_db: Dataset = backend_d.load_dataset("debian_data")
 
-log.info(f"Loaded {debian_db.name()} data. {len(debian_db)} documents with {len(debian_db.keywords())} words.")
+# log.info(f"Loaded {debian_db.name()} data. {len(debian_db)} documents with {len(debian_db.keywords())} words.")
 # debian_db_restricted = debian_db.restrict_keyword_size(25,Selectivity.High)
 # log.info(f"{debian_db_restricted.name()} now contains {len(debian_db_restricted)} documents with "
 #          f"{len(debian_db_restricted.keywords())} words.")
@@ -77,9 +77,9 @@ log.info(f"Loaded {debian_db.name()} data. {len(debian_db)} documents with {len(
 
 
 backend_u = WhooshBackend()
-ubuntu_db: Dataset = backend_u.load_dataset("ubuntu_data")
+# ubuntu_db: Dataset = backend_u.load_dataset("ubuntu_data")
 
-log.info(f"Loaded {ubuntu_db.name()} data. {len(ubuntu_db)} documents with {len(ubuntu_db.keywords())} words.")
+# log.info(f"Loaded {ubuntu_db.name()} data. {len(ubuntu_db)} documents with {len(ubuntu_db.keywords())} words.")
 # ubuntu_db_restricted = ubuntu_db.restrict_keyword_size(25,Selectivity.High)
 # log.info(f"{ubuntu_db_restricted.name()} now contains {len(ubuntu_db_restricted)} documents with "
 #          f"{len(ubuntu_db_restricted.keywords())} words.")
@@ -101,7 +101,7 @@ backend = WhooshBackend()
 enron_db: Dataset = backend.load_dataset("enron_sent")
 
 log.info(f"Loaded {enron_db.name()} data. {len(enron_db)} documents with {len(enron_db.keywords())} words.")
-enron_db_restricted = enron_db.restrict_keyword_size(500,Selectivity.High)
+#enron_db_restricted = enron_db.restrict_keyword_size(500,Selectivity.High)
 
 # enron_kw = list(enron_db.keywords())
 # enron_sorted = sorted(enron_kw,key=lambda kw: enron_db.selectivity(kw), reverse=True)
@@ -294,14 +294,14 @@ query_space = AuxiliaryKnowledgeQuerySpace#PartialQueryLogSpace
 
 # We can evaluate according to many criteria:
 print(data['frequencies'].shape)
-attacks = [Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.keywords_list())]  # the attacks to evaluate
-runs = 1  # Amount of evaluations
+attacks = [Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords())]  # the attacks to evaluate
+runs = 5  # Amount of evaluations
 
 # From this, we can construct a simple EvaluationCase:
-evaluation_case = EvaluationCase(attacks=attacks, dataset=ubuntu_db,runs=runs)#enron_db_restricted, runs=runs)
+evaluation_case = EvaluationCase(attacks=attacks, dataset=enron_db,runs=runs)#enron_db_restricted, runs=runs)
 
 kdr = [.5]  # known data rates
-reuse = True  # If we reuse sampled datasets a number of times (=> we will have a 5x5 evaluation here)
+reuse = False  # If we reuse sampled datasets a number of times (=> we will have a 5x5 evaluation here)
 # From this, we can construct a DatasetSampler:
 dataset_sampler = SampledDatasetSampler(kdr_samples=kdr, reuse=reuse)
 # The query space to populate. Here, we use partial sampling from
