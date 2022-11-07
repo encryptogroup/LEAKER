@@ -264,6 +264,9 @@ class SQLRelationalDatabase(RelationalDatabase):
         if res is not None:
             return res[0][0]
 
+    def parent(self) -> 'SQLRelationalDatabase':
+        return self
+
 
 class SampledSQLRelationalDatabase(SQLRelationalDatabase):
     """
@@ -385,3 +388,6 @@ class SampledSQLRelationalDatabase(SQLRelationalDatabase):
             if query in self.get_extension(SelectivityExtension).get_identity_cache().keys():
                 return self.get_extension(SelectivityExtension).selectivity(query)
         return sum(1 for _ in self.query(query))
+
+    def parent(self) -> SQLRelationalDatabase:
+        return self.__parent

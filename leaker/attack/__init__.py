@@ -5,7 +5,7 @@ from .query_space import FullQuerySpace, PartialQuerySpace, FullQueryLogSpace, P
 from .sel_vol_an import SelVolAn
 from .subgraph import SubgraphID, SubgraphVL
 from .vol_an import VolAn
-from .count import BasicCount, Countv2, RiondatoCount, AddRiondatoCount
+from .count import BasicCount, Countv2, EstimatorCount, AddEstimatorCount
 from .ikk import Ikk
 from .ikk_optimized import Ikkoptimized
 from .arr import Arr, Arrorder
@@ -29,7 +29,7 @@ __all__ = [
 
     'SubgraphID', 'SubgraphVL',  # subgraph.py
 
-    'BasicCount', 'Countv2', 'RiondatoCount', 'AddRiondatoCount',  # count.py
+    'BasicCount', 'Countv2', 'EstimatorCount', 'AddEstimatorCount',  # count.py
 
     'Ikk',  # ikk.py
 
