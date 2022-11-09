@@ -8,9 +8,11 @@ This file provides interfacing to various cardinality estimator implementations.
 """
 
 from abc import abstractmethod, ABC
+from collections import Counter
 from typing import Any, Dict, Union, Optional, Tuple
-
+from sklearn.neighbors import KernelDensity
 import torch
+import numpy as np
 
 from .naru.common import Table, CsvTable, TableDataset
 from .naru.estimators import ProgressiveSampling, CardEst
@@ -34,7 +36,8 @@ class RelationalEstimator(ABC):
         self._full = full
 
     @abstractmethod
-    def train(self) -> None:
+    def _train(self) -> None:
+        """Explicit method for training phase. Should be called from the constructor"""
         raise NotImplementedError
 
     @abstractmethod
@@ -70,18 +73,18 @@ class NaruRelationalEstimator(RelationalEstimator):
                     self._table_dict[table_id] = (CsvTable(table, df, df.columns),
                                                   CsvTable(table, full_df, full_df.columns))
 
-                self.train()
+                self._train()
         else:
             for table in self._dataset_sample.tables():
                 table_id = self._dataset_sample.table_id(table)
                 df = pd_ext.get_df(table_id)
                 full_df = full_pd_ext.get_df(table_id)
                 self._table_dict[table_id] = (
-                CsvTable(table, df, df.columns), CsvTable(table, full_df, full_df.columns))
+                    CsvTable(table, df, df.columns), CsvTable(table, full_df, full_df.columns))
 
-            self.train()
+            self._train()
 
-    def train(self) -> None:
+    def _train(self) -> None:
         self._estimator = dict()
         for table_name in self._dataset_sample.tables():
             table_id = self._dataset_sample.table_id(table_name)
@@ -134,12 +137,12 @@ class NaruRelationalEstimator(RelationalEstimator):
 
     def estimate(self, kw: RelationalKeyword, kw2: Optional[RelationalKeyword] = None) -> float:
         if self._estimator is None:
-            self.train()
+            self._train()
 
         table, _ = self._table_dict[kw.table]
         if kw2 is None:
             return self._estimator[kw.table].Query([c for c in table.Columns() if f"attr_{kw.attr}" in c.name], ["="],
-                                               [kw.value])
+                                                   [kw.value])
         else:
             if kw2.table != kw.table:
                 return 0
@@ -147,3 +150,51 @@ class NaruRelationalEstimator(RelationalEstimator):
                 return self._estimator[kw.table].Query([c for c in table.Columns() if f"attr_{kw.attr}" in c.name] +
                                                        [c for c in table.Columns() if f"attr_{kw2.attr}" in c.name],
                                                        ["=", "="], [kw.value, kw2.value])
+
+
+class KDERelationalEstimator(RelationalEstimator):
+    """Uses a Kernel Density Estimator"""
+    _estimator: Union[None, Dict[Tuple[int, str], KernelDensity]] = None
+    _word_mapping: Union[None, Dict[Tuple[int, str, Union[str, int]], int]] = None
+    _table_n: Dict[int, int]
+
+    def __init__(self, sample: RelationalDatabase, full: RelationalDatabase):
+        super().__init__(sample, full)
+
+        self._table_n = dict()
+        for t, ids in full._table_row_ids.items():
+            self._table_n[t] = len(ids)
+
+        if not self._dataset_sample.has_extension(PandasExtension):
+            self._dataset_sample.extend_with(PandasExtension)
+
+        self._train()
+
+    def _train(self) -> None:
+        self._estimator = dict()
+        self._word_mapping = dict()
+        pd_ext = self._dataset_sample.get_extension(PandasExtension)
+
+        for t in self._table_n.keys():
+            df = pd_ext.get_df(t)
+            for a in df.columns:
+                vals = []
+                for i, w in enumerate(df[a].to_list()):
+                    if (t, a, w) not in self._word_mapping:
+                        self._word_mapping[(t, a, w)] = i
+                    vals.append(self._word_mapping[(t, a, w)])
+                vals = np.array(vals)
+                self._estimator[(t, a)] = KernelDensity().fit(vals.reshape(-1, 1))
+
+    def estimate(self, kw: RelationalKeyword, kw2: Optional[RelationalKeyword] = None) -> float:
+        if self._estimator is None:
+            self._train()
+        if (kw.table, f"attr_{kw.attr}", kw.value) not in self._word_mapping:
+            return 0
+
+        ld = self._estimator[(kw.table, f"attr_{kw.attr}")].score(np.array([self._word_mapping[(kw.table,
+                                                                                                  f"attr_{kw.attr}",
+                                                                                                  kw.value)]]).reshape(
+            1, -1))
+
+        return np.exp(ld)*self._table_n[kw.table]
