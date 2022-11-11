@@ -193,23 +193,54 @@ class KDERelationalEstimator(RelationalEstimator):
             return 0
 
         ld = self._estimator[(kw.table, f"attr_{kw.attr}")].score(np.array([self._word_mapping[(kw.table,
-                                                                                                  f"attr_{kw.attr}",
-                                                                                                  kw.value)]]).reshape(
+                                                                                                f"attr_{kw.attr}",
+                                                                                                kw.value)]]).reshape(
             1, -1))
 
-        return np.exp(ld)*self._table_n[kw.table]
+        return np.exp(ld) * self._table_n[kw.table]
 
 
 class NaiveRelationalEstimator(RelationalEstimator):
-    def __init__(self, sample: RelationalDatabase, full: RelationalDatabase):
-        super().__init__(sample, full)
+    """Uses the naive estimator of [HILM09]"""
+    _full_cardinality: Dict[int, int]
+    _use_full: bool
 
-        self._estimator = len(full.documents()) / len(sample.documents())
+    def __init__(self, sample: RelationalDatabase, full: RelationalDatabase, use_full: bool):
+        # use_full: obtain nr ob unique elements per attribute of the full dataset instead of the sampled dataset
+        # (increases accuracy)
+        super().__init__(sample, full)
+        self._full_cardinality = self._calculate_full_cardinality(self._full)
+        self._use_full = use_full
+        self._train()
+
+    def _calculate_full_cardinality(self, dataset) -> Dict[int, int]:
+        # calculates cardinality (number of documents) of each table,
+        # returns {table0: nr_of_docs, ..., tableN: nr_of_docs}
+        return dict((t, len([d for d in dataset.documents() if d[0] == t])) for t in
+                    set(map(lambda x: x[0], dataset.documents())))
+
+    def _calculate_column_cardinalities(self, dataset) -> Dict[int, Dict[int, int]]:
+        # calculates the column cardinalities of each table and column,
+        # returns: {table0: {attr0: nr_of_unique_items, ..., attrN: nr_of_unique_items}, table1: {...}, ...}
+        table_ids = set(map(lambda x: x.table, dataset.keywords()))
+        attribute_ids = set(map(lambda x: (x.table, x.attr), dataset.keywords()))
+        unique_values_dict = dict((t, dict((a[1], 0) for a in attribute_ids if a[0] == t)) for t in table_ids)
+        for table_id, attr_value in unique_values_dict.items():
+            for attr_id in attr_value:
+                unique_values_dict[table_id][attr_id] = len(set(map(lambda x: x.value,
+                                                                 [el for el in dataset.keywords() if
+                                                                  el.attr == attr_id and el.table == table_id])))
+        return unique_values_dict
 
     def _train(self) -> None:
-        # do nothing
-        pass
+        if not self._use_full:
+            self._estimator = self._calculate_column_cardinalities(self._dataset_sample)
+        else:
+            self._estimator = self._calculate_column_cardinalities(self._full)
 
-    def estimate(self, kw: RelationalKeyword) -> float:
-        # TODO: co-occurrence not yet supported
-        return self._estimator * sum(1 for _ in self._dataset_sample(kw))
+    def estimate(self, kw: RelationalKeyword, kw2: Optional[RelationalKeyword] = None) -> float:
+        if kw2 is None:
+            return self._full_cardinality[kw.table] / self._estimator[kw.table][kw.attr]
+        else:
+            return (self._full_cardinality[kw.table] / self._estimator[kw.table][kw.attr]) * \
+                   (self._full_cardinality[kw2.table] / self._estimator[kw2.table][kw2.attr])
