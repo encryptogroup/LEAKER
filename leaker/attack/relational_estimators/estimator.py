@@ -201,15 +201,15 @@ class KDERelationalEstimator(RelationalEstimator):
 
 
 class NaiveRelationalEstimator(RelationalEstimator):
-    _ratio: float
-    _sample: RelationalDatabase
-
     def __init__(self, sample: RelationalDatabase, full: RelationalDatabase):
         super().__init__(sample, full)
 
-        _sample = sample
-        _ratio = len(full.documents()) / len(_sample.documents())
+        self._estimator = len(full.documents()) / len(sample.documents())
+
+    def _train(self) -> None:
+        # do nothing
+        pass
 
     def estimate(self, kw: RelationalKeyword) -> float:
         # TODO: co-occurrence not yet supported
-        return self._ratio * sum(1 for _ in self._sample(kw))
+        return self._estimator * sum(1 for _ in self._dataset_sample(kw))
