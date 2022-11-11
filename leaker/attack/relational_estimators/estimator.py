@@ -198,3 +198,18 @@ class KDERelationalEstimator(RelationalEstimator):
             1, -1))
 
         return np.exp(ld)*self._table_n[kw.table]
+
+
+class NaiveRelationalEstimator(RelationalEstimator):
+    _ratio: float
+    _sample: RelationalDatabase
+
+    def __init__(self, sample: RelationalDatabase, full: RelationalDatabase):
+        super().__init__(sample, full)
+
+        _sample = sample
+        _ratio = len(full.documents()) / len(_sample.documents())
+
+    def estimate(self, kw: RelationalKeyword) -> float:
+        # TODO: co-occurrence not yet supported
+        return self._ratio * sum(1 for _ in self._sample(kw))
