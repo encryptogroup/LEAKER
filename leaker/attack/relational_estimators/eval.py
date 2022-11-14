@@ -6,7 +6,7 @@ import pandas
 
 from leaker.api import Dataset, RelationalDatabase, RelationalQuery
 from leaker.attack.relational_estimators.estimator import NaruRelationalEstimator, KDERelationalEstimator, \
-    NaiveRelationalEstimator
+    NaiveRelationalEstimator, SamplingRelationalEstimator
 from leaker.extension import IdentityExtension
 from leaker.sql_interface import SQLBackend
 
@@ -23,9 +23,10 @@ log = logging.getLogger(__name__)
 backend = SQLBackend()
 log.info(f"has dbs {backend.data_sets()}")
 mimic_db: RelationalDatabase = backend.load("dmv_full")
-log.info(f"Loaded {mimic_db.name()} data. {len(mimic_db)} documents with {len(mimic_db.keywords())} words. {mimic_db.has_extension(IdentityExtension)}")
+log.info(
+    f"Loaded {mimic_db.name()} data. {len(mimic_db)} documents with {len(mimic_db.keywords())} words. {mimic_db.has_extension(IdentityExtension)}")
 
-sampled_db = mimic_db.sample(0.1)
+sampled_db = mimic_db.sample(0.01)
 
 
 def evaluate_estimator_rlen(estimator):
@@ -33,6 +34,7 @@ def evaluate_estimator_rlen(estimator):
     error_value_list = []
     for q in mimic_db.keywords()[:1000]:
         est_value = max(1, estimator.estimate(q))  # lower bound at 1 to prevent 0 division
+        #print(est_value)
         actual_value = max(1, sum(1 for _ in mimic_db(q)))
         current_error = max(est_value, actual_value) / min(est_value, actual_value)  # q-error, naru paper, p. 8
         error_value_list.append(current_error)
@@ -42,6 +44,12 @@ def evaluate_estimator_rlen(estimator):
     log.info('.99: ' + str(statistics.quantiles(data=error_value_list, n=100)[98]))
     log.info('MAX: ' + str(max(error_value_list)))
     mimic_db.close()
+
+
+# SAMPLING
+naive_est = SamplingRelationalEstimator(sample=sampled_db, full=mimic_db)
+log.info('SAMPLING')
+evaluate_estimator_rlen(naive_est)
 
 # NAIVE
 naive_est = NaiveRelationalEstimator(sample=sampled_db, full=mimic_db, use_full=True)
@@ -57,7 +65,3 @@ evaluate_estimator_rlen(naru_est)
 kde_est = KDERelationalEstimator(sample=sampled_db, full=mimic_db)
 log.info('KDE')
 evaluate_estimator_rlen(kde_est)
-
-
-
-

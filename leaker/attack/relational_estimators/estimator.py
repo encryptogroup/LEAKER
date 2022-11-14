@@ -219,7 +219,7 @@ class NaiveRelationalEstimator(RelationalEstimator):
         self._train()
 
     def _calculate_full_cardinality(self, dataset) -> Dict[int, int]:
-        """calculates cardinality (number of documents) of each table,
+        """calculates cardinality (number of documents) of each table (of the full dataset),
             returns {table0: nr_of_docs, ..., tableN: nr_of_docs}"""
         return dict((t, len([d for d in dataset.documents() if d[0] == t])) for t in
                     set(map(lambda x: x[0], dataset.documents())))
@@ -249,3 +249,37 @@ class NaiveRelationalEstimator(RelationalEstimator):
         else:
             return (self._full_cardinality[kw.table] / self._estimator[kw.table][kw.attr]) * \
                    (self._full_cardinality[kw2.table] / self._estimator[kw2.table][kw2.attr])
+
+
+class SamplingRelationalEstimator(RelationalEstimator):
+    """
+        Uses the sampling estimator of ??
+    """
+    _full_cardinality: Dict[int, int]
+    _sample_cardinality: Dict[int, int]
+
+    def __init__(self, sample: RelationalDatabase, full: RelationalDatabase):
+        super().__init__(sample, full)
+
+        self._full_cardinality = self._calculate_cardinality(self._full)
+        self._sample_cardinality = self._calculate_cardinality(self._dataset_sample)
+
+        self._train()
+
+    def _calculate_cardinality(self, dataset) -> Dict[int, int]:
+        """calculates cardinality (number of documents) of each table,
+            returns {table0: nr_of_docs, ..., tableN: nr_of_docs}"""
+        return dict((t, len([d for d in dataset.documents() if d[0] == t])) for t in
+                    set(map(lambda x: x[0], dataset.documents())))
+
+    def _train(self) -> None:
+        pass
+
+    def estimate(self, kw: RelationalKeyword, kw2: Optional[RelationalKeyword] = None) -> float:
+        if kw2 is None:
+            rel_selectivity = (self._dataset_sample.selectivity(kw) / self._sample_cardinality[kw.table])
+            return rel_selectivity * self._full_cardinality[kw.table]
+        else:
+            rlen_sample = len([i for i in self._dataset_sample(kw) if i in self._dataset_sample(kw2)])
+            rel_selectivity = rlen_sample / min(self._sample_cardinality[kw.table], self._sample_cardinality[kw2.table])
+            return rel_selectivity * min(self._full_cardinality[kw.table], self._full_cardinality[kw2.table])
