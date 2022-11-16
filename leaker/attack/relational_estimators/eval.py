@@ -1,8 +1,8 @@
 import logging
 import statistics
 import sys
-
 import pandas
+import seaborn as sns
 
 from leaker.api import Dataset, RelationalDatabase, RelationalQuery
 from leaker.attack.relational_estimators.estimator import NaruRelationalEstimator, KDERelationalEstimator, \
@@ -26,42 +26,61 @@ mimic_db: RelationalDatabase = backend.load("dmv_full")
 log.info(
     f"Loaded {mimic_db.name()} data. {len(mimic_db)} documents with {len(mimic_db.keywords())} words. {mimic_db.has_extension(IdentityExtension)}")
 
-sampled_db = mimic_db.sample(0.01)
-
 
 def evaluate_estimator_rlen(estimator):
     mimic_db.open()
     error_value_list = []
-    for q in mimic_db.keywords()[:1000]:
+    for q in mimic_db.keywords():
         est_value = max(1, estimator.estimate(q))  # lower bound at 1 to prevent 0 division
-        #print(est_value)
         actual_value = max(1, sum(1 for _ in mimic_db(q)))
         current_error = max(est_value, actual_value) / min(est_value, actual_value)  # q-error, naru paper, p. 8
         error_value_list.append(current_error)
 
-    log.info('MEDIAN: ' + str(statistics.median(error_value_list)))
-    log.info('.95: ' + str(statistics.quantiles(data=error_value_list, n=100)[94]))
-    log.info('.99: ' + str(statistics.quantiles(data=error_value_list, n=100)[98]))
-    log.info('MAX: ' + str(max(error_value_list)))
+    median = statistics.median(error_value_list)
+    point95 = statistics.quantiles(data=error_value_list, n=100)[94]
+    point99 = statistics.quantiles(data=error_value_list, n=100)[98]
+    maximum = max(error_value_list)
+
+    '''
+    log.info('MEDIAN: ' + str(median))
+    log.info('.95: ' + str(point95))
+    log.info('.99: ' + str(point99))
+    log.info('MAX: ' + str(maximum))
+    '''
     mimic_db.close()
+    return median, point95, point99, maximum
 
 
-# SAMPLING
-naive_est = SamplingRelationalEstimator(sample=sampled_db, full=mimic_db)
-log.info('SAMPLING')
-evaluate_estimator_rlen(naive_est)
+df = pandas.DataFrame(index=['median', '.95', '.99', 'max'])
+for known_data_rate in [i / 10 for i in range(1, 11)]:
+    sampled_db = mimic_db.sample(known_data_rate)
 
-# NAIVE
-naive_est = NaiveRelationalEstimator(sample=sampled_db, full=mimic_db, use_full=True)
-log.info('NAIVE')
-evaluate_estimator_rlen(naive_est)
+    # SAMPLING
+    sampling_est = SamplingRelationalEstimator(sample=sampled_db, full=mimic_db)
+    log.info('SAMPLING')
+    df['SAMPLING-' + str(known_data_rate)] = evaluate_estimator_rlen(sampling_est)
 
-# NARU Estimator
-naru_est = NaruRelationalEstimator(sample=sampled_db, full=mimic_db)
-log.info('NARU')
-evaluate_estimator_rlen(naru_est)
+    # NAIVE
+    naive_est = NaiveRelationalEstimator(sample=sampled_db, full=mimic_db, use_full=False)
+    log.info('NAIVE')
+    df['NAIVE-' + str(known_data_rate)] = evaluate_estimator_rlen(naive_est)
 
-# KDE Estimator
-kde_est = KDERelationalEstimator(sample=sampled_db, full=mimic_db)
-log.info('KDE')
-evaluate_estimator_rlen(kde_est)
+    # NAIVE (with knowledge of unique nr of element of full DB)
+    naive_est = NaiveRelationalEstimator(sample=sampled_db, full=mimic_db, use_full=True)
+    log.info('NAIVE')
+    df['NAIVE-full-' + str(known_data_rate)] = evaluate_estimator_rlen(naive_est)
+
+    # KDE Estimator
+    kde_est = KDERelationalEstimator(sample=sampled_db, full=mimic_db)
+    log.info('KDE')
+    evaluate_estimator_rlen(kde_est)
+
+    # NARU Estimator
+    naru_est = NaruRelationalEstimator(sample=sampled_db, full=mimic_db)
+    log.info('NARU')
+    evaluate_estimator_rlen(naru_est)
+
+df = df.transpose()
+df = df.sort_index()
+sns_plot = sns.heatmap(df, annot=True, cmap='RdYlGn_r', fmt=".1f")
+sns_plot.figure.savefig("estimators.png", bbox_inches='tight')
