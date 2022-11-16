@@ -281,5 +281,6 @@ class SamplingRelationalEstimator(RelationalEstimator):
             return rel_selectivity * self._full_cardinality[kw.table]
         else:
             rlen_sample = len([i for i in self._dataset_sample(kw) if i in self._dataset_sample(kw2)])
+            # if rlen>0, then kw and kw2 are from the same table; therefore sample cardinality is the same
             rel_selectivity = rlen_sample / min(self._sample_cardinality[kw.table], self._sample_cardinality[kw2.table])
             return rel_selectivity * min(self._full_cardinality[kw.table], self._full_cardinality[kw2.table])
