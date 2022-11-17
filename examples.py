@@ -34,7 +34,7 @@ console.setFormatter(f)
 file = logging.FileHandler('examples.log', 'w', 'utf-8')
 file.setFormatter(f)
 
-logging.basicConfig(handlers=[console, file], level=logging.INFO)
+logging.basicConfig(handlers=[console, file], level=logging.WARNING)
 
 log = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ and settings are not covered (see the evaluations and tests for a more comprehen
 # preprocessor.run()
 
 backend_d = WhooshBackend()
-# debian_db: Dataset = backend_d.load_dataset("debian_data")
+debian_db: Dataset = backend_d.load_dataset("debian_data")
 
 # log.info(f"Loaded {debian_db.name()} data. {len(debian_db)} documents with {len(debian_db.keywords())} words.")
 # debian_db_restricted = debian_db.restrict_keyword_size(25,Selectivity.High)
@@ -77,7 +77,7 @@ backend_d = WhooshBackend()
 
 
 backend_u = WhooshBackend()
-# ubuntu_db: Dataset = backend_u.load_dataset("ubuntu_data")
+ubuntu_db: Dataset = backend_u.load_dataset("ubuntu_data")
 
 # log.info(f"Loaded {ubuntu_db.name()} data. {len(ubuntu_db)} documents with {len(ubuntu_db.keywords())} words.")
 # ubuntu_db_restricted = ubuntu_db.restrict_keyword_size(25,Selectivity.High)
@@ -100,7 +100,7 @@ backend_u = WhooshBackend()
 backend = WhooshBackend()
 enron_db: Dataset = backend.load_dataset("enron_sent")
 
-log.info(f"Loaded {enron_db.name()} data. {len(enron_db)} documents with {len(enron_db.keywords())} words.")
+# log.info(f"Loaded {enron_db.name()} data. {len(enron_db)} documents with {len(enron_db.keywords())} words.")
 #enron_db_restricted = enron_db.restrict_keyword_size(500,Selectivity.High)
 
 # enron_kw = list(enron_db.keywords())
@@ -280,6 +280,9 @@ log.info(f"Loaded {enron_db.name()} data. {len(enron_db)} documents with {len(en
 # query_log_obs = DummyKeywordQueryLogFromList("queries_obs", pkl.load(queries_obs_file))
 # queries_real_file = open("/home/user/Documents/LEAKER/LEAKER/data_sources/Google_Trends/queries_real.pkl",'rb')
 # query_log_real = DummyKeywordQueryLogFromList("queries_obs", pkl.load(queries_real_file))
+
+#tair_db = backend_d.load_dataset("tair_gd")
+
 data: dict = None
 with open("/home/user/Documents/LEAKER/LEAKER/data_sources/Google_Trends/aux_knowledge.pkl",'rb') as f:
     data = pkl.load(f)
@@ -293,8 +296,8 @@ query_log = DummyKeywordQueryLogFromTrends("trends_querylog", keyword_trends,100
 query_space = AuxiliaryKnowledgeQuerySpace#PartialQueryLogSpace
 
 # We can evaluate according to many criteria:
-print(data['frequencies'].shape)
-attacks = [Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords())]  # the attacks to evaluate
+#print(data['frequencies'].shape)
+attacks = [Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=0),Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=0.25),Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=0.5),Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=0.75),Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=1)]  # the attacks to evaluate
 runs = 5  # Amount of evaluations
 
 # From this, we can construct a simple EvaluationCase:
@@ -303,11 +306,12 @@ evaluation_case = EvaluationCase(attacks=attacks, dataset=enron_db,runs=runs)#en
 kdr = [.5]  # known data rates
 reuse = False  # If we reuse sampled datasets a number of times (=> we will have a 5x5 evaluation here)
 # From this, we can construct a DatasetSampler:
+#dataset_sampler = SampledDatasetSampler(training_set=ubuntu_db)
 dataset_sampler = SampledDatasetSampler(kdr_samples=kdr, reuse=reuse)
 # The query space to populate. Here, we use partial sampling from
 # the data collection. With a query log, a QueryLogSpace is used.
 sel = Selectivity.High  # When sampling queries, we use high selectivity keywords
-qsp_size = 100  # Size of the query space
+qsp_size = 150  # Size of the query space
 sample_size = 100  # Amount of queries attacked at a time (sampled from the query space)
 allow_repetition = True  # If queries can repeat
 # From this, we can construct a QuerySelector:
