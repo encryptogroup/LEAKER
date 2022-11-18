@@ -30,7 +30,7 @@ log.info(
 def evaluate_estimator_rlen(estimator):
     mimic_db.open()
     error_value_list = []
-    for q in mimic_db.keywords():
+    for q in mimic_db.keywords()[:1000]:
         est_value = max(1, estimator.estimate(q))  # lower bound at 1 to prevent 0 division
         actual_value = max(1, sum(1 for _ in mimic_db(q)))
         current_error = max(est_value, actual_value) / min(est_value, actual_value)  # q-error, naru paper, p. 8
@@ -52,7 +52,7 @@ def evaluate_estimator_rlen(estimator):
 
 
 df = pandas.DataFrame(index=['median', '.95', '.99', 'max'])
-for known_data_rate in [i / 10 for i in range(1, 11)]:
+for known_data_rate in [i / 10 for i in range(2, 11, 2)]:
     sampled_db = mimic_db.sample(known_data_rate)
 
     # SAMPLING
@@ -61,24 +61,19 @@ for known_data_rate in [i / 10 for i in range(1, 11)]:
     df['SAMPLING-' + str(known_data_rate)] = evaluate_estimator_rlen(sampling_est)
 
     # NAIVE
-    naive_est = NaiveRelationalEstimator(sample=sampled_db, full=mimic_db, use_full=False)
+    naive_est = NaiveRelationalEstimator(sample=sampled_db, full=mimic_db)
     log.info('NAIVE')
     df['NAIVE-' + str(known_data_rate)] = evaluate_estimator_rlen(naive_est)
-
-    # NAIVE (with knowledge of unique nr of element of full DB)
-    naive_est = NaiveRelationalEstimator(sample=sampled_db, full=mimic_db, use_full=True)
-    log.info('NAIVE')
-    df['NAIVE-full-' + str(known_data_rate)] = evaluate_estimator_rlen(naive_est)
 
     # KDE Estimator
     kde_est = KDERelationalEstimator(sample=sampled_db, full=mimic_db)
     log.info('KDE')
-    evaluate_estimator_rlen(kde_est)
+    df['KDE-' + str(known_data_rate)] = evaluate_estimator_rlen(kde_est)
 
     # NARU Estimator
     naru_est = NaruRelationalEstimator(sample=sampled_db, full=mimic_db)
     log.info('NARU')
-    evaluate_estimator_rlen(naru_est)
+    df['NARU-' + str(known_data_rate)] = evaluate_estimator_rlen(naru_est)
 
 df = df.transpose()
 df = df.sort_index()
