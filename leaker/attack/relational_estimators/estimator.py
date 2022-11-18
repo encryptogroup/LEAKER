@@ -204,18 +204,12 @@ class NaiveRelationalEstimator(RelationalEstimator):
     """
         Uses the naive estimator of [HILM09]
 
-        Parameters
-        ----------
-        use_full : bool
-            obtain nr ob unique elements per attribute of the full dataset instead of the sampled dataset
     """
     _full_cardinality: Dict[int, int]
-    _use_full: bool
 
-    def __init__(self, sample: RelationalDatabase, full: RelationalDatabase, use_full: bool):
+    def __init__(self, sample: RelationalDatabase, full: RelationalDatabase):
         super().__init__(sample, full)
         self._full_cardinality = self._calculate_full_cardinality(self._full)
-        self._use_full = use_full
         self._train()
 
     def _calculate_full_cardinality(self, dataset) -> Dict[int, int]:
@@ -238,10 +232,7 @@ class NaiveRelationalEstimator(RelationalEstimator):
         return unique_values_dict
 
     def _train(self) -> None:
-        if not self._use_full:
-            self._estimator = self._calculate_column_cardinalities(self._dataset_sample)
-        else:
-            self._estimator = self._calculate_column_cardinalities(self._full)
+        self._estimator = self._calculate_column_cardinalities(self._dataset_sample)
 
     def estimate(self, kw: RelationalKeyword, kw2: Optional[RelationalKeyword] = None) -> float:
         if kw2 is None:
