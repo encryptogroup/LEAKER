@@ -3,8 +3,9 @@ import statistics
 import sys
 import pandas
 import seaborn as sns
+import random
 
-from leaker.api import Dataset, RelationalDatabase, RelationalQuery
+from leaker.api import RelationalDatabase
 from leaker.attack.relational_estimators.estimator import NaruRelationalEstimator, KDERelationalEstimator, \
     NaiveRelationalEstimator, SamplingRelationalEstimator
 from leaker.extension import IdentityExtension
@@ -27,10 +28,25 @@ log.info(
     f"Loaded {mimic_db.name()} data. {len(mimic_db)} documents with {len(mimic_db.keywords())} words. {mimic_db.has_extension(IdentityExtension)}")
 
 
-def evaluate_estimator_rlen(estimator):
+def evaluate_actual_rlen(keywords):
+    mimic_db.open()
+    rlen_list = []
+    for q in keywords:
+        rlen_list.append(sum(1 for _ in mimic_db(q)))
+
+    median = statistics.median(rlen_list)
+    point95 = statistics.quantiles(data=rlen_list, n=100)[94]
+    point99 = statistics.quantiles(data=rlen_list, n=100)[98]
+    maximum = max(rlen_list)
+
+    mimic_db.close()
+    return median, point95, point99, maximum
+
+
+def evaluate_estimator_rlen(estimator, keywords):
     mimic_db.open()
     error_value_list = []
-    for q in mimic_db.keywords()[:1000]:
+    for q in keywords:
         est_value = max(1, estimator.estimate(q))  # lower bound at 1 to prevent 0 division
         actual_value = max(1, sum(1 for _ in mimic_db(q)))
         current_error = max(est_value, actual_value) / min(est_value, actual_value)  # q-error, naru paper, p. 8
@@ -51,31 +67,36 @@ def evaluate_estimator_rlen(estimator):
     return median, point95, point99, maximum
 
 
-df = pandas.DataFrame(index=['median', '.95', '.99', 'max'])
-for known_data_rate in [i / 10 for i in range(2, 11, 2)]:
-    sampled_db = mimic_db.sample(known_data_rate)
+def run_rlen_eval():
+    df = pandas.DataFrame(index=['median', '.95', '.99', 'max'])
+    for known_data_rate in [i / 10 for i in range(2, 11, 2)]:
+        sampled_db = mimic_db.sample(known_data_rate)
+        kw_sample = random.sample(mimic_db.keywords(), 100)  # nr of queries for evaluation
 
-    # SAMPLING
-    sampling_est = SamplingRelationalEstimator(sample=sampled_db, full=mimic_db)
-    log.info('SAMPLING')
-    df['SAMPLING-' + str(known_data_rate)] = evaluate_estimator_rlen(sampling_est)
+        # SAMPLING
+        sampling_est = SamplingRelationalEstimator(sample=sampled_db, full=mimic_db)
+        log.info('SAMPLING')
+        df['SAMPLING-' + str(known_data_rate)] = evaluate_estimator_rlen(sampling_est, kw_sample)
 
-    # NAIVE
-    naive_est = NaiveRelationalEstimator(sample=sampled_db, full=mimic_db)
-    log.info('NAIVE')
-    df['NAIVE-' + str(known_data_rate)] = evaluate_estimator_rlen(naive_est)
+        # NAIVE
+        naive_est = NaiveRelationalEstimator(sample=sampled_db, full=mimic_db)
+        log.info('NAIVE')
+        df['NAIVE-' + str(known_data_rate)] = evaluate_estimator_rlen(naive_est, kw_sample)
 
-    # KDE Estimator
-    kde_est = KDERelationalEstimator(sample=sampled_db, full=mimic_db)
-    log.info('KDE')
-    df['KDE-' + str(known_data_rate)] = evaluate_estimator_rlen(kde_est)
+        # KDE Estimator
+        kde_est = KDERelationalEstimator(sample=sampled_db, full=mimic_db)
+        log.info('KDE')
+        df['KDE-' + str(known_data_rate)] = evaluate_estimator_rlen(kde_est, kw_sample)
 
-    # NARU Estimator
-    naru_est = NaruRelationalEstimator(sample=sampled_db, full=mimic_db)
-    log.info('NARU')
-    df['NARU-' + str(known_data_rate)] = evaluate_estimator_rlen(naru_est)
+        # NARU Estimator
+        naru_est = NaruRelationalEstimator(sample=sampled_db, full=mimic_db)
+        log.info('NARU')
+        df['NARU-' + str(known_data_rate)] = evaluate_estimator_rlen(naru_est, kw_sample)
 
-df = df.transpose()
-df = df.sort_index()
-sns_plot = sns.heatmap(df, annot=True, cmap='RdYlGn_r', fmt=".1f")
-sns_plot.figure.savefig("estimators.png", bbox_inches='tight')
+    df = df.transpose()
+    df = df.sort_index()
+    sns_plot = sns.heatmap(df, annot=True, cmap='RdYlGn_r', fmt=".1f")
+    sns_plot.figure.savefig("estimators.png", bbox_inches='tight')
+
+run_rlen_eval()
+#print(evaluate_actual_rlen(mimic_db.keywords()))
