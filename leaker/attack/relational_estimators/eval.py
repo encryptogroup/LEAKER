@@ -1,6 +1,8 @@
 import logging
 import statistics
 import sys
+from typing import Tuple
+
 import pandas
 import seaborn as sns
 import random
@@ -43,12 +45,12 @@ def evaluate_actual_rlen(keywords):
     return median, point95, point99, maximum
 
 
-def evaluate_estimator_rlen(estimator, keywords):
+def evaluate_estimator_rlen(estimator, keywords) -> Tuple[float, float, float, float]:
     mimic_db.open()
     error_value_list = []
     for q in keywords:
-        est_value = max(1, estimator.estimate(q))  # lower bound at 1 to prevent 0 division
-        actual_value = max(1, sum(1 for _ in mimic_db(q)))
+        est_value = estimator.estimate(q) + 1
+        actual_value = sum(1 for _ in mimic_db(q)) + 1
         current_error = max(est_value, actual_value) / min(est_value, actual_value)  # q-error, naru paper, p. 8
         error_value_list.append(current_error)
 
@@ -67,36 +69,40 @@ def evaluate_estimator_rlen(estimator, keywords):
     return median, point95, point99, maximum
 
 
-def run_rlen_eval():
-    df = pandas.DataFrame(index=['median', '.95', '.99', 'max'])
-    for known_data_rate in [i / 10 for i in range(2, 11, 2)]:
-        sampled_db = mimic_db.sample(known_data_rate)
-        kw_sample = random.sample(mimic_db.keywords(), 100)  # nr of queries for evaluation
+def run_rlen_eval(nr_of_evals=1):
+    results_list = []
+    for _ in range(0, nr_of_evals):
+        for known_data_rate in [i / 10 for i in range(2, 11, 2)]:
+            sampled_db = mimic_db.sample(known_data_rate)
+            kw_sample = random.sample(mimic_db.keywords(), 100)  # nr of queries for evaluation
 
-        # SAMPLING
-        sampling_est = SamplingRelationalEstimator(sample=sampled_db, full=mimic_db)
-        log.info('SAMPLING')
-        df['SAMPLING-' + str(known_data_rate)] = evaluate_estimator_rlen(sampling_est, kw_sample)
+            # SAMPLING
+            sampling_est = SamplingRelationalEstimator(sample=sampled_db, full=mimic_db)
+            log.info('SAMPLING')
+            results_list.append(
+                ('SAMPLING-' + str(known_data_rate),) + evaluate_estimator_rlen(sampling_est, kw_sample))
 
-        # NAIVE
-        naive_est = NaiveRelationalEstimator(sample=sampled_db, full=mimic_db)
-        log.info('NAIVE')
-        df['NAIVE-' + str(known_data_rate)] = evaluate_estimator_rlen(naive_est, kw_sample)
+            # NAIVE
+            naive_est = NaiveRelationalEstimator(sample=sampled_db, full=mimic_db)
+            log.info('NAIVE')
+            results_list.append(('NAIVE-' + str(known_data_rate),) + evaluate_estimator_rlen(naive_est, kw_sample))
 
-        # KDE Estimator
-        kde_est = KDERelationalEstimator(sample=sampled_db, full=mimic_db)
-        log.info('KDE')
-        df['KDE-' + str(known_data_rate)] = evaluate_estimator_rlen(kde_est, kw_sample)
+            # KDE Estimator
+            kde_est = KDERelationalEstimator(sample=sampled_db, full=mimic_db)
+            log.info('KDE')
+            results_list.append(('KDE-' + str(known_data_rate),) + evaluate_estimator_rlen(kde_est, kw_sample))
 
-        # NARU Estimator
-        naru_est = NaruRelationalEstimator(sample=sampled_db, full=mimic_db)
-        log.info('NARU')
-        df['NARU-' + str(known_data_rate)] = evaluate_estimator_rlen(naru_est, kw_sample)
+            # NARU Estimator
+            # naru_est = NaruRelationalEstimator(sample=sampled_db, full=mimic_db)
+            # log.info('NARU')
+            # df['NARU-' + str(known_data_rate)] = evaluate_estimator_rlen(naru_est, kw_sample)
 
-    df = df.transpose()
+    df = pandas.DataFrame(data=results_list, columns=['method', 'median', '.95', '.99', 'max'])
+    df = df.groupby(['method']).mean()
     df = df.sort_index()
     sns_plot = sns.heatmap(df, annot=True, cmap='RdYlGn_r', fmt=".1f")
     sns_plot.figure.savefig("estimators.png", bbox_inches='tight')
 
-run_rlen_eval()
-#print(evaluate_actual_rlen(mimic_db.keywords()))
+
+run_rlen_eval(5)
+# print(evaluate_actual_rlen(mimic_db.keywords()))
