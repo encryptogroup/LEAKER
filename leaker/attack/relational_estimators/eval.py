@@ -93,9 +93,9 @@ def run_rlen_eval(nr_of_evals=1):
             results_list.append(('KDE-' + str(known_data_rate),) + evaluate_estimator_rlen(kde_est, kw_sample))
 
             # NARU Estimator
-            # naru_est = NaruRelationalEstimator(sample=sampled_db, full=mimic_db)
-            # log.info('NARU')
-            # df['NARU-' + str(known_data_rate)] = evaluate_estimator_rlen(naru_est, kw_sample)
+            naru_est = NaruRelationalEstimator(sample=sampled_db, full=mimic_db)
+            log.info('NARU')
+            results_list.append(('NARU-' + str(known_data_rate),) + evaluate_estimator_rlen(naru_est, kw_sample))
 
     df = pandas.DataFrame(data=results_list, columns=['method', 'median', '.95', '.99', 'max'])
     df = df.groupby(['method']).mean()
@@ -104,5 +104,5 @@ def run_rlen_eval(nr_of_evals=1):
     sns_plot.figure.savefig("estimators.png", bbox_inches='tight')
 
 
-run_rlen_eval(5)
+run_rlen_eval(3)
 # print(evaluate_actual_rlen(mimic_db.keywords()))
