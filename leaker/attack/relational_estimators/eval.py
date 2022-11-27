@@ -1,7 +1,7 @@
 import logging
 import statistics
 import sys
-from typing import Tuple
+from typing import Tuple, List
 
 import pandas
 import seaborn as sns
@@ -46,7 +46,7 @@ def evaluate_actual_rlen(keywords):
     return median, point95, point99, maximum
 
 
-def evaluate_estimator(estimator, keywords, use_cooc=False) -> Tuple[float, float, float, float]:
+def evaluate_estimator(estimator, keywords: List[str], use_cooc=False) -> Tuple[float, float, float, float]:
     mimic_db.open()
     error_value_list = []
     if not use_cooc:
@@ -58,10 +58,10 @@ def evaluate_estimator(estimator, keywords, use_cooc=False) -> Tuple[float, floa
             error_value_list.append(current_error)
     else:
         _full_coocc = mimic_db.get_extension(CoOccurrenceExtension)
-        for q in keywords:
-            for q2 in keywords:
-                est_value = estimator.estimate(q, q2) + 1
-                actual_value = _full_coocc.co_occurrence(q, q2) + 1
+        for i in range(0, len(keywords)):
+            for j in range(0, i+1):
+                est_value = estimator.estimate(keywords[i], keywords[j]) + 1
+                actual_value = _full_coocc.co_occurrence(keywords[i], keywords[j]) + 1
                 current_error = max(est_value, actual_value) / min(est_value, actual_value)  # q-error, naru paper, p. 8
                 error_value_list.append(current_error)
 
@@ -80,13 +80,13 @@ def evaluate_estimator(estimator, keywords, use_cooc=False) -> Tuple[float, floa
     return median, point95, point99, maximum
 
 
-def run_rlen_eval(nr_of_evals=1, nr_of_queries = 100, use_cooc=False):
+def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, use_cooc=False):
     if use_cooc:
         if not mimic_db.has_extension(CoOccurrenceExtension):
             mimic_db.extend_with(CoOccurrenceExtension)
     else:
         if not mimic_db.has_extension(IdentityExtension):
-            mimic_db.extend_with(IdentityExtension)#
+            mimic_db.extend_with(IdentityExtension)
 
     results_list = []
     for _ in range(0, nr_of_evals):
@@ -123,5 +123,5 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries = 100, use_cooc=False):
     sns_plot.figure.savefig("estimators.png", bbox_inches='tight')
 
 
-run_rlen_eval(nr_of_evals=3, nr_of_queries=100, use_cooc=True)
+run_rlen_eval(nr_of_evals=1, nr_of_queries=2, use_cooc=True)
 # print(evaluate_actual_rlen(mimic_db.keywords()))
