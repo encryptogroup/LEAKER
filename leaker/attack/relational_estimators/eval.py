@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 from leaker.api import RelationalDatabase
 from leaker.attack.relational_estimators.estimator import NaruRelationalEstimator, KDERelationalEstimator, \
-    NaiveRelationalEstimator, SamplingRelationalEstimator
+    NaiveRelationalEstimator, SamplingRelationalEstimator, IamRelationalEstimator
 from leaker.extension import IdentityExtension, CoOccurrenceExtension
 from leaker.sql_interface import SQLBackend
 
@@ -18,7 +18,7 @@ f = logging.Formatter(fmt='{asctime} {levelname:8.8} {process} --- [{threadName:
                       style='{')
 console = logging.StreamHandler(sys.stdout)
 console.setFormatter(f)
-file = logging.FileHandler('eval_dmv_red.log', 'w', 'utf-8')
+file = logging.FileHandler('eval.log', 'w', 'utf-8')
 file.setFormatter(f)
 logging.basicConfig(handlers=[console, file], level=logging.DEBUG)
 log = logging.getLogger(__name__)
@@ -46,23 +46,37 @@ def evaluate_actual_rlen(keywords):
     return median, point95, point99, maximum
 
 
+def ErrorMetric(est_card, card):
+    if card == 0 and est_card != 0:
+        return est_card
+    if card != 0 and est_card == 0:
+        return card
+    if card == 0 and est_card == 0:
+        return 1.0
+    return max(est_card / card, card / est_card)
+
+
 def evaluate_estimator(estimator, keywords: List[str], use_cooc=False) -> Tuple[float, float, float, float]:
     mimic_db.open()
     error_value_list = []
     if not use_cooc:
         _full_identity = mimic_db.get_extension(IdentityExtension)
         for q in keywords:
-            est_value = estimator.estimate(q) + 1
-            actual_value = len(_full_identity.doc_ids(q)) + 1
-            current_error = max(est_value, actual_value) / min(est_value, actual_value)  # q-error, naru paper, p. 8
+            est_value = estimator.estimate(q)
+            actual_value = len(_full_identity.doc_ids(q))
+            print(est_value)
+            print(actual_value)
+            current_error = ErrorMetric(est_value, actual_value)
+            #current_error = max(est_value, actual_value) / min(est_value, actual_value)  # q-error, naru paper, p. 8
             error_value_list.append(current_error)
     else:
         _full_coocc = mimic_db.get_extension(CoOccurrenceExtension)
         for i in range(0, len(keywords)):
-            for j in range(0, i+1):
-                est_value = estimator.estimate(keywords[i], keywords[j]) + 1
-                actual_value = _full_coocc.co_occurrence(keywords[i], keywords[j]) + 1
-                current_error = max(est_value, actual_value) / min(est_value, actual_value)  # q-error, naru paper, p. 8
+            for j in range(0, i + 1):
+                est_value = estimator.estimate(keywords[i], keywords[j])
+                actual_value = _full_coocc.co_occurrence(keywords[i], keywords[j])
+                current_error = ErrorMetric(est_value, actual_value)
+                #current_error = max(est_value, actual_value) / min(est_value, actual_value)  # q-error, naru paper, p. 8
                 error_value_list.append(current_error)
 
     median = statistics.median(error_value_list)
@@ -90,7 +104,7 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, use_cooc=False):
 
     results_list = []
     for _ in range(0, nr_of_evals):
-        for known_data_rate in [i / 10 for i in range(2, 11, 2)]:
+        for known_data_rate in [i / 10 for i in range(2, 10, 2)]:
             sampled_db = mimic_db.sample(known_data_rate)
             kw_sample = random.sample(mimic_db.keywords(), nr_of_queries)  # nr of queries for evaluation
 
@@ -98,22 +112,27 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, use_cooc=False):
             sampling_est = SamplingRelationalEstimator(sample=sampled_db, full=mimic_db)
             log.info('SAMPLING')
             results_list.append(
-                ('SAMPLING-' + str(known_data_rate),) + evaluate_estimator(sampling_est, kw_sample, use_cooc))
+               ('SAMPLING-' + str(known_data_rate),) + evaluate_estimator(sampling_est, kw_sample, use_cooc))
 
             # NAIVE
-            naive_est = NaiveRelationalEstimator(sample=sampled_db, full=mimic_db)
-            log.info('NAIVE')
-            results_list.append(('NAIVE-' + str(known_data_rate),) + evaluate_estimator(naive_est, kw_sample, use_cooc))
+            # naive_est = NaiveRelationalEstimator(sample=sampled_db, full=mimic_db)
+            # log.info('NAIVE')
+            # results_list.append(('NAIVE-' + str(known_data_rate),) + evaluate_estimator(naive_est, kw_sample, use_cooc))
 
             # KDE Estimator
-            kde_est = KDERelationalEstimator(sample=sampled_db, full=mimic_db)
-            log.info('KDE')
-            results_list.append(('KDE-' + str(known_data_rate),) + evaluate_estimator(kde_est, kw_sample, use_cooc))
+            # kde_est = KDERelationalEstimator(sample=sampled_db, full=mimic_db)
+            # log.info('KDE')
+            # results_list.append(('KDE-' + str(known_data_rate),) + evaluate_estimator(kde_est, kw_sample, use_cooc))
 
             # NARU Estimator
-            naru_est = NaruRelationalEstimator(sample=sampled_db, full=mimic_db)
-            log.info('NARU')
-            results_list.append(('NARU-' + str(known_data_rate),) + evaluate_estimator(naru_est, kw_sample, use_cooc))
+            #naru_est = NaruRelationalEstimator(sample=sampled_db, full=mimic_db)
+            #log.info('NARU')
+            #results_list.append(('NARU-' + str(known_data_rate),) + evaluate_estimator(naru_est, kw_sample, use_cooc))
+
+            # IAM Estimator
+            iam_est = IamRelationalEstimator(sample=sampled_db, full=mimic_db)
+            log.info('IAM')
+            results_list.append(('IAM-' + str(known_data_rate),) + evaluate_estimator(iam_est, kw_sample, use_cooc))
 
     df = pandas.DataFrame(data=results_list, columns=['method', 'median', '.95', '.99', 'max'])
     df = df.groupby(['method']).mean()
@@ -123,5 +142,5 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, use_cooc=False):
     sns_plot.figure.savefig("estimators.png", bbox_inches='tight')
 
 
-run_rlen_eval(nr_of_evals=1, nr_of_queries=2, use_cooc=True)
+run_rlen_eval(nr_of_evals=1, nr_of_queries=20, use_cooc=False)
 # print(evaluate_actual_rlen(mimic_db.keywords()))
