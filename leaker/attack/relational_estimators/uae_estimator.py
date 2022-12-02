@@ -1,9 +1,12 @@
+import math
+
 import numpy as np
 import torch
 from typing import Dict, Tuple, Union, Optional
 
 from leaker.api import RelationalDatabase, RelationalKeyword
 from leaker.attack.relational_estimators.estimator import RelationalEstimator
+from leaker.attack.relational_estimators.uae import made
 from leaker.attack.relational_estimators.uae.common import Table, CsvTable, TableDataset
 from leaker.attack.relational_estimators.uae.estimators import CardEst, DifferentiableProgressiveSampling
 from leaker.attack.relational_estimators.uae.train_uae import Entropy, MakeMade, ReportModel, InitWeight, DEVICE, \
@@ -17,12 +20,15 @@ class UaeRelationalEstimator(RelationalEstimator):
     _table_dict: Dict[int, Tuple[Table, Table]]
     __epochs: int
     __batch_size: int
+    __nr_train_queries: int
     _estimator: Union[None, Dict[int, CardEst]] = None
 
-    def __init__(self, sample: RelationalDatabase, full: RelationalDatabase, epochs: int = 20, batch_size: int = 2048):
+    def __init__(self, sample: RelationalDatabase, full: RelationalDatabase, epochs: int = 20, batch_size: int = 2048,
+                 nr_train_queries: int = 100):
         self._table_dict = dict()
         self.__epochs = epochs
         self.__batch_size = batch_size
+        self.__nr_train_queries = nr_train_queries
         super().__init__(sample, full)
 
         if not self._dataset_sample.has_extension(PandasExtension):
@@ -64,7 +70,16 @@ class UaeRelationalEstimator(RelationalEstimator):
 
             table_train = table
 
-            model = MakeMade(128, table.columns, None, None)
+            #model = MakeMade(128, table.columns, None, None)
+            model = made.MADE(
+                nin=len(table.columns),
+                hidden_sizes=[128] * 2,
+                nout=sum([c.DistributionSize() for c in table.columns]),
+                input_bins=[c.DistributionSize() for c in table.columns],
+                embed_size=32,
+                column_masking=True,
+                input_encoding='binary',
+            ).to(DEVICE)
 
             ReportModel(model)
 
@@ -75,22 +90,42 @@ class UaeRelationalEstimator(RelationalEstimator):
             train_data = TableDataset(table_train)
             n_cols = len(table.columns)
 
-            # TODO: load training queries
+            columns_list = []
+            operators_list = []
+            vals_list = []
+            card_list = []
+
+            query_list = self._full.queries(self.__nr_train_queries, table_id)  # TODO: yield random queries (yield all, then select randomly)
+
+            for query in query_list:
+                cols = ['attr_' + str(query.attr)]
+                ops = ['=']
+                vals = [query.value]
+                columns_list.append(cols)
+                operators_list.append(ops)
+                vals_list.append(vals)
+                card_list.append(self._full.selectivity(query))
+
+            total_query_num = len(card_list)
+
+            num_steps = table.cardinality / self.__batch_size
+            q_bs = math.ceil(total_query_num / num_steps)
+            q_bs = int(q_bs)
 
             estimator = DifferentiableProgressiveSampling(model=model,
                                                           table=table,
-                                                          r=1000,
-                                                          batch_size=1024,
+                                                          r=2,
+                                                          batch_size=q_bs,
                                                           device=DEVICE,
+                                                          shortcircuit=True,
                                                           )
 
-            # TODO
-            # wildcard_indicator, valid_i_list = estimator.ProcessQuery(args.dataset, columns_list, operators_list,
-            #                                                          vals_list)
+            wildcard_indicator, valid_i_list = estimator.ProcessQuery('dmv_full', columns_list, operators_list,
+                                                                      vals_list)
 
-            #valid_i_list = np.array(valid_i_list)
-            #card_list = torch.as_tensor(card_list, dtype=torch.float32)
-            #card_list = card_list.to(DEVICE)
+            valid_i_list = np.array(valid_i_list, dtype=object)
+            card_list = torch.as_tensor(card_list, dtype=torch.float32)
+            card_list = card_list.to(DEVICE)
 
             for epoch in range(self.__epochs):
                 torch.set_grad_enabled(True)
@@ -98,14 +133,15 @@ class UaeRelationalEstimator(RelationalEstimator):
                 mean_epoch_train_loss = RunEpoch('train',
                                                  model,
                                                  estimator,
-                                                 #valid_i_list,
-                                                 #wildcard_indicator,
-                                                 #card_list,
+                                                 valid_i_list,
+                                                 wildcard_indicator,
+                                                 card_list,
                                                  opt,
                                                  n_cols=n_cols,
                                                  train_data=train_data,
                                                  val_data=train_data,
                                                  batch_size=self.__batch_size,
+                                                 q_bs=q_bs,
                                                  epoch_num=epoch,
                                                  log_every=10,
                                                  table_bits=table_bits)
@@ -115,17 +151,4 @@ class UaeRelationalEstimator(RelationalEstimator):
             print(f"Done.")
 
     def estimate(self, kw: RelationalKeyword, kw2: Optional[RelationalKeyword] = None) -> float:
-        if self._estimator is None:
-            self._train()
-
-        table, _ = self._table_dict[kw.table]
-        if kw2 is None:
-            return self._estimator[kw.table].Query([c for c in table.Columns() if f"attr_{kw.attr}" in c.name], ["="],
-                                                   [kw.value])
-        else:
-            if kw2.table != kw.table:
-                return 0
-            else:
-                return self._estimator[kw.table].Query([c for c in table.Columns() if f"attr_{kw.attr}" in c.name] +
-                                                       [c for c in table.Columns() if f"attr_{kw2.attr}" in c.name],
-                                                       ["=", "="], [kw.value, kw2.value])
+        return NotImplementedError
