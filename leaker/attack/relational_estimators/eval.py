@@ -1,6 +1,8 @@
 import logging
 import statistics
 import sys
+
+import numpy as np
 from typing import Tuple, List
 
 import pandas
@@ -10,7 +12,8 @@ import matplotlib.pyplot as plt
 
 from leaker.api import RelationalDatabase
 from leaker.attack.relational_estimators.estimator import NaruRelationalEstimator, KDERelationalEstimator, \
-    NaiveRelationalEstimator, SamplingRelationalEstimator, IamRelationalEstimator
+    NaiveRelationalEstimator, SamplingRelationalEstimator
+from leaker.attack.relational_estimators.neurocard_estimator import NeurocardRelationalEstimator
 from leaker.extension import IdentityExtension, CoOccurrenceExtension
 from leaker.sql_interface import SQLBackend
 
@@ -79,10 +82,10 @@ def evaluate_estimator(estimator, keywords: List[str], use_cooc=False) -> Tuple[
                 #current_error = max(est_value, actual_value) / min(est_value, actual_value)  # q-error, naru paper, p. 8
                 error_value_list.append(current_error)
 
-    median = statistics.median(error_value_list)
-    point95 = statistics.quantiles(data=error_value_list, n=100)[94]
-    point99 = statistics.quantiles(data=error_value_list, n=100)[98]
-    maximum = max(error_value_list)
+    median = np.median(error_value_list)
+    point95 = np.quantile(error_value_list, 0.95)
+    point99 = np.quantile(error_value_list, 0.99)
+    maximum = np.max(error_value_list)
 
     '''
     log.info('MEDIAN: ' + str(median))
@@ -120,19 +123,20 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, use_cooc=False):
             # results_list.append(('NAIVE-' + str(known_data_rate),) + evaluate_estimator(naive_est, kw_sample, use_cooc))
 
             # KDE Estimator
-            # kde_est = KDERelationalEstimator(sample=sampled_db, full=mimic_db)
-            # log.info('KDE')
-            # results_list.append(('KDE-' + str(known_data_rate),) + evaluate_estimator(kde_est, kw_sample, use_cooc))
+            kde_est = KDERelationalEstimator(sample=sampled_db, full=mimic_db)
+            log.info('KDE')
+            results_list.append(('KDE-' + str(known_data_rate),) + evaluate_estimator(kde_est, kw_sample, use_cooc))
+
+            # Neurocard Estimator
+            neurocard_est = NeurocardRelationalEstimator(sample=sampled_db, full=mimic_db)
+            log.info('Neurocard')
+            results_list.append(
+                ('Neurocard-' + str(known_data_rate),) + evaluate_estimator(neurocard_est, kw_sample, use_cooc))
 
             # NARU Estimator
-            #naru_est = NaruRelationalEstimator(sample=sampled_db, full=mimic_db)
-            #log.info('NARU')
-            #results_list.append(('NARU-' + str(known_data_rate),) + evaluate_estimator(naru_est, kw_sample, use_cooc))
-
-            # IAM Estimator
-            iam_est = IamRelationalEstimator(sample=sampled_db, full=mimic_db)
-            log.info('IAM')
-            results_list.append(('IAM-' + str(known_data_rate),) + evaluate_estimator(iam_est, kw_sample, use_cooc))
+            naru_est = NaruRelationalEstimator(sample=sampled_db, full=mimic_db)
+            log.info('NARU')
+            results_list.append(('NARU-' + str(known_data_rate),) + evaluate_estimator(naru_est, kw_sample, use_cooc))
 
     df = pandas.DataFrame(data=results_list, columns=['method', 'median', '.95', '.99', 'max'])
     df = df.groupby(['method']).mean()
@@ -142,5 +146,5 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, use_cooc=False):
     sns_plot.figure.savefig("estimators.png", bbox_inches='tight')
 
 
-run_rlen_eval(nr_of_evals=1, nr_of_queries=20, use_cooc=False)
+run_rlen_eval(nr_of_evals=1, nr_of_queries=20, use_cooc=True)
 # print(evaluate_actual_rlen(mimic_db.keywords()))
