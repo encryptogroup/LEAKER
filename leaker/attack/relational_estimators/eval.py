@@ -14,6 +14,7 @@ from leaker.api import RelationalDatabase
 from leaker.attack.relational_estimators.estimator import NaruRelationalEstimator, KDERelationalEstimator, \
     NaiveRelationalEstimator, SamplingRelationalEstimator
 from leaker.attack.relational_estimators.neurocard_estimator import NeurocardRelationalEstimator
+from leaker.attack.relational_estimators.uae_estimator import UaeRelationalEstimator
 from leaker.extension import IdentityExtension, CoOccurrenceExtension
 from leaker.sql_interface import SQLBackend
 
@@ -60,7 +61,6 @@ def ErrorMetric(est_card, card):
 
 
 def evaluate_estimator(estimator, keywords: List[str], use_cooc=False) -> Tuple[float, float, float, float]:
-    mimic_db.open()
     error_value_list = []
     if not use_cooc:
         _full_identity = mimic_db.get_extension(IdentityExtension)
@@ -93,7 +93,6 @@ def evaluate_estimator(estimator, keywords: List[str], use_cooc=False) -> Tuple[
     log.info('.99: ' + str(point99))
     log.info('MAX: ' + str(maximum))
     '''
-    mimic_db.close()
     return median, point95, point99, maximum
 
 
@@ -108,6 +107,7 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, use_cooc=False):
     results_list = []
     for _ in range(0, nr_of_evals):
         for known_data_rate in [i / 10 for i in range(2, 10, 2)]:
+            mimic_db.open()
             sampled_db = mimic_db.sample(known_data_rate)
             kw_sample = random.sample(mimic_db.keywords(), nr_of_queries)  # nr of queries for evaluation
 
@@ -127,6 +127,12 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, use_cooc=False):
             log.info('KDE')
             results_list.append(('KDE-' + str(known_data_rate),) + evaluate_estimator(kde_est, kw_sample, use_cooc))
 
+            # UAE Estimator
+            uae_est = UaeRelationalEstimator(sample=sampled_db, full=mimic_db)
+            log.info('UAE')
+            results_list.append(
+                ('UAE-' + str(known_data_rate),) + evaluate_estimator(uae_est, kw_sample, use_cooc))
+
             # Neurocard Estimator
             neurocard_est = NeurocardRelationalEstimator(sample=sampled_db, full=mimic_db)
             log.info('Neurocard')
@@ -144,7 +150,8 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, use_cooc=False):
     sns_plot = sns.heatmap(df, annot=True, cmap='RdYlGn_r', fmt=".1f")
     plt.title('cooc=' + str(use_cooc) + ', nr_of_evals=' + str(nr_of_evals) + ', nr_of_queries=' + str(nr_of_queries))
     sns_plot.figure.savefig("estimators.png", bbox_inches='tight')
+    mimic_db.close()
 
 
-run_rlen_eval(nr_of_evals=1, nr_of_queries=20, use_cooc=True)
+run_rlen_eval(nr_of_evals=1, nr_of_queries=20, use_cooc=False)
 # print(evaluate_actual_rlen(mimic_db.keywords()))
