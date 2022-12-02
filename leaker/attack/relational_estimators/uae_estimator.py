@@ -8,7 +8,8 @@ from leaker.api import RelationalDatabase, RelationalKeyword
 from leaker.attack.relational_estimators.estimator import RelationalEstimator
 from leaker.attack.relational_estimators.uae import made
 from leaker.attack.relational_estimators.uae.common import Table, CsvTable, TableDataset
-from leaker.attack.relational_estimators.uae.estimators import CardEst, DifferentiableProgressiveSampling
+from leaker.attack.relational_estimators.uae.estimators import CardEst, DifferentiableProgressiveSampling, \
+    ProgressiveSampling
 from leaker.attack.relational_estimators.uae.train_uae import Entropy, MakeMade, ReportModel, InitWeight, DEVICE, \
     RunEpoch
 from leaker.extension import PandasExtension
@@ -70,7 +71,7 @@ class UaeRelationalEstimator(RelationalEstimator):
 
             table_train = table
 
-            #model = MakeMade(128, table.columns, None, None)
+            # model = MakeMade(128, table.columns, None, None)
             model = made.MADE(
                 nin=len(table.columns),
                 hidden_sizes=[128] * 2,
@@ -95,7 +96,8 @@ class UaeRelationalEstimator(RelationalEstimator):
             vals_list = []
             card_list = []
 
-            query_list = self._full.queries(self.__nr_train_queries, table_id)  # TODO: yield random queries (yield all, then select randomly)
+            query_list = self._full.queries(self.__nr_train_queries,
+                                            table_id)  # TODO: yield random queries (yield all, then select randomly)
 
             for query in query_list:
                 cols = ['attr_' + str(query.attr)]
@@ -146,9 +148,26 @@ class UaeRelationalEstimator(RelationalEstimator):
                                                  log_every=10,
                                                  table_bits=table_bits)
 
-            self._estimator[table_id] = estimator
+            act_model = ProgressiveSampling(model, table, len(self._dataset_sample.row_ids(table_id)),
+                                            device=torch.device(DEVICE),
+                                            cardinality=full_table.cardinality)
+
+            self._estimator[table_id] = act_model
 
             print(f"Done.")
 
     def estimate(self, kw: RelationalKeyword, kw2: Optional[RelationalKeyword] = None) -> float:
-        return NotImplementedError
+        if self._estimator is None:
+            self._train()
+
+        table, _ = self._table_dict[kw.table]
+        if kw2 is None:
+            return self._estimator[kw.table].Query([c for c in table.Columns() if f"attr_{kw.attr}" in c.name], ["="],
+                                                   [kw.value])
+        else:
+            if kw2.table != kw.table:
+                return 0
+            else:
+                return self._estimator[kw.table].Query([c for c in table.Columns() if f"attr_{kw.attr}" in c.name] +
+                                                       [c for c in table.Columns() if f"attr_{kw2.attr}" in c.name],
+                                                       ["=", "="], [kw.value, kw2.value])
