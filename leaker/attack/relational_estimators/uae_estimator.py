@@ -25,8 +25,8 @@ class UaeRelationalEstimator(RelationalEstimator):
     __nr_train_queries: int
     __scale = 256
     __layers = 4
-    __psample = 2000
-    __diff_psample = 200
+    __psample = 100
+    __diff_psample = 100
     _estimator: Union[None, Dict[int, CardEst]] = None
 
     def __init__(self, sample: RelationalDatabase, full: RelationalDatabase, epochs: int = 20, batch_size: int = 1024,
@@ -64,11 +64,11 @@ class UaeRelationalEstimator(RelationalEstimator):
 
     def _train(self) -> None:
         self._estimator = dict()
+
         for table_name in self._dataset_sample.tables():
             table_id = self._dataset_sample.table_id(table_name)
 
             table, full_table = self._table_dict[table_id]
-
             table_bits = Entropy(
                 table,
                 table.data.fillna(value=0).groupby([c.name for c in table.columns
@@ -95,7 +95,7 @@ class UaeRelationalEstimator(RelationalEstimator):
             train_data = TableDataset(table_train)
             n_cols = len(table.columns)
 
-            # sample training queries randomly
+            # sample training queries randomly from full table
             query_list = random.sample(self._full.queries(table=table_id), self.__nr_train_queries)
 
             columns_list = []
@@ -107,10 +107,13 @@ class UaeRelationalEstimator(RelationalEstimator):
                 cols = [f'attr_{query.attr}']
                 ops = ['=']
                 vals = [query.value]
+                # calculate selectivity of query based on full table
+                sel = len([1 for x in self._full(query) if x[0] == table_id]) / \
+                      len(list([1 for x in self._full.documents() if x[0] == table_id]))
                 columns_list.append(cols)
                 operators_list.append(ops)
                 vals_list.append(vals)
-                card_list.append(self._full.selectivity(query))
+                card_list.append(sel)
 
             total_query_num = len(card_list)
 
@@ -118,6 +121,7 @@ class UaeRelationalEstimator(RelationalEstimator):
             q_bs = math.ceil(total_query_num / num_steps)
             q_bs = int(q_bs)
 
+            #self.__diff_psample = len(self._dataset_sample.row_ids(table_id))
             diff_estimator = DifferentiableProgressiveSampling(model=model,
                                                                table=table,
                                                                r=self.__diff_psample,
@@ -126,8 +130,8 @@ class UaeRelationalEstimator(RelationalEstimator):
                                                                shortcircuit=True,
                                                                )
 
-            wildcard_indicator, valid_i_list = diff_estimator.ProcessQuery('dmv_full', columns_list, operators_list,
-                                                                           vals_list)
+            wildcard_indicator, valid_i_list = diff_estimator.ProcessQuery(self._dataset_sample.name(), columns_list,
+                                                                           operators_list, vals_list)
 
             valid_i_list = np.array(valid_i_list, dtype=object)
             card_list = torch.as_tensor(card_list, dtype=torch.float32)
@@ -152,7 +156,7 @@ class UaeRelationalEstimator(RelationalEstimator):
                                                  log_every=10,
                                                  table_bits=table_bits)
 
-            self.__psample = len(self._dataset_sample.row_ids(table_id))
+            #self.__psample = len(self._dataset_sample.row_ids(table_id))
             estimator = ProgressiveSampling(model, table, self.__psample,
                                             device=torch.device(DEVICE),
                                             cardinality=full_table.cardinality)
