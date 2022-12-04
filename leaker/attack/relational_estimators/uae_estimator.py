@@ -158,7 +158,8 @@ class UaeRelationalEstimator(RelationalEstimator):
 
             estimator = ProgressiveSampling(model, table, self.__psample,
                                             device=torch.device(DEVICE),
-                                            cardinality=full_table.cardinality)
+                                            cardinality=full_table.cardinality,
+                                            shortcircuit=True)
 
             self._estimator[table_id] = estimator
 
