@@ -23,13 +23,14 @@ class UaeRelationalEstimator(RelationalEstimator):
     __epochs: int
     __batch_size: int
     __nr_train_queries: int
-    __scale = 256
-    __layers = 4
-    __psample = 100
-    __diff_psample = 100
+    __scale = 128
+    __layers = 2
+    __psample = 200  # figure 4a, UAE paper
+    __diff_psample = 200  # figure 4a, UAE paper
     _estimator: Union[None, Dict[int, CardEst]] = None
 
-    def __init__(self, sample: RelationalDatabase, full: RelationalDatabase, epochs: int = 20, batch_size: int = 1024,
+    # TODO: in UAE github example batch-size=4096, here not possible because of but error
+    def __init__(self, sample: RelationalDatabase, full: RelationalDatabase, epochs: int = 50, batch_size: int = 1024,
                  nr_train_queries: int = 100):
         self._table_dict = dict()
         self.__epochs = epochs
@@ -121,7 +122,6 @@ class UaeRelationalEstimator(RelationalEstimator):
             q_bs = math.ceil(total_query_num / num_steps)
             q_bs = int(q_bs)
 
-            #self.__diff_psample = len(self._dataset_sample.row_ids(table_id))
             diff_estimator = DifferentiableProgressiveSampling(model=model,
                                                                table=table,
                                                                r=self.__diff_psample,
@@ -156,7 +156,6 @@ class UaeRelationalEstimator(RelationalEstimator):
                                                  log_every=10,
                                                  table_bits=table_bits)
 
-            #self.__psample = len(self._dataset_sample.row_ids(table_id))
             estimator = ProgressiveSampling(model, table, self.__psample,
                                             device=torch.device(DEVICE),
                                             cardinality=full_table.cardinality)
