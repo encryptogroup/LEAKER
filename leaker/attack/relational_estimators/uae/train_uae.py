@@ -81,7 +81,7 @@ parser.add_argument('--epochs',
                     help='Number of epochs to train for.')
 parser.add_argument('--constant-lr',
                     type=float,
-                    default=None,
+                    default=5e-4,
                     help='Constant LR? this is crucial for training single-table UAE')
 parser.add_argument(
     '--column-masking',
