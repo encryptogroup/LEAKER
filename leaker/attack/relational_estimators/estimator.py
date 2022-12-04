@@ -53,6 +53,7 @@ class NaruRelationalEstimator(RelationalEstimator):
     _table_dict: Dict[int, Tuple[Table, Table]]
     __epochs: int
     _estimator: Union[None, Dict[int, CardEst]] = None
+    __psample = 500
 
     def __init__(self, sample: RelationalDatabase, full: RelationalDatabase, epochs: int = 20):
         self._table_dict = dict()
@@ -126,8 +127,8 @@ class NaruRelationalEstimator(RelationalEstimator):
                                                  table_bits=table_bits,
                                                  return_losses=True
                                                  )
-
-            estimator = ProgressiveSampling(model, table, len(self._dataset_sample.row_ids(table_id)),
+            #self.psample = len(self._dataset_sample.row_ids(table_id))
+            estimator = ProgressiveSampling(model, table, self.__psample,
                                             device=torch.device(DEVICE),
                                             cardinality=full_table.cardinality)
             self._estimator[table_id] = estimator
