@@ -29,8 +29,9 @@ class UaeRelationalEstimator(RelationalEstimator):
     __diff_psample = 200  # figure 4a, UAE paper
     _estimator: Union[None, Dict[int, CardEst]] = None
 
-    # TODO: in UAE github example batch-size=4096, here not possible because of but error
-    def __init__(self, sample: RelationalDatabase, full: RelationalDatabase, epochs: int = 50, batch_size: int = 1024,
+    # TODO: In UAE github example: epochs=50
+    #  batch-size=4096, here not possible because of but error
+    def __init__(self, sample: RelationalDatabase, full: RelationalDatabase, epochs: int = 30, batch_size: int = 1024,
                  nr_train_queries: int = 100):
         self._table_dict = dict()
         self.__epochs = epochs
@@ -156,10 +157,13 @@ class UaeRelationalEstimator(RelationalEstimator):
                                                  log_every=10,
                                                  table_bits=table_bits)
 
+            ReportModel(model)
+            model.eval()
             estimator = ProgressiveSampling(model, table, self.__psample,
-                                            device=torch.device(DEVICE),
+                                            device=DEVICE,
                                             cardinality=full_table.cardinality,
-                                            shortcircuit=True)
+                                            #shortcircuit=True # TODO: should be true, but error in this case
+                                            )
 
             self._estimator[table_id] = estimator
 
