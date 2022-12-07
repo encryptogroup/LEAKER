@@ -53,3 +53,4 @@ pandas>=1.2.4
 # Estimators
 torch>=1.9.0
 sklearn
+seaborn
