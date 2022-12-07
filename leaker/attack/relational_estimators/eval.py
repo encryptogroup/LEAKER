@@ -12,9 +12,7 @@ import matplotlib.pyplot as plt
 
 from leaker.api import RelationalDatabase
 from leaker.attack.relational_estimators.estimator import NaruRelationalEstimator, KDERelationalEstimator, \
-    NaiveRelationalEstimator, SamplingRelationalEstimator
-from leaker.attack.relational_estimators.neurocard_estimator import NeurocardRelationalEstimator
-from leaker.attack.relational_estimators.uae_estimator import UaeRelationalEstimator
+    SamplingRelationalEstimator
 from leaker.extension import IdentityExtension, CoOccurrenceExtension
 from leaker.sql_interface import SQLBackend
 
