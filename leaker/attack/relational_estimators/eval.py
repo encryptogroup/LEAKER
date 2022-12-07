@@ -18,11 +18,14 @@ from leaker.attack.relational_estimators.uae_estimator import UaeRelationalEstim
 from leaker.extension import IdentityExtension, CoOccurrenceExtension
 from leaker.sql_interface import SQLBackend
 
+# SPECIFY TO BE USED DATASET HERE
+dataset = 'dmv_full'
+
 f = logging.Formatter(fmt='{asctime} {levelname:8.8} {process} --- [{threadName:12.12}] {name:32.32}: {message}',
                       style='{')
 console = logging.StreamHandler(sys.stdout)
 console.setFormatter(f)
-file = logging.FileHandler('eval.log', 'w', 'utf-8')
+file = logging.FileHandler('eval_' + dataset + '.log', 'w', 'utf-8')
 file.setFormatter(f)
 logging.basicConfig(handlers=[console, file], level=logging.DEBUG)
 log = logging.getLogger(__name__)
@@ -30,7 +33,7 @@ log = logging.getLogger(__name__)
 # Import
 backend = SQLBackend()
 log.info(f"has dbs {backend.data_sets()}")
-mimic_db: RelationalDatabase = backend.load("dmv_full")
+mimic_db: RelationalDatabase = backend.load(dataset)
 log.info(
     f"Loaded {mimic_db.name()} data. {len(mimic_db)} documents with {len(mimic_db.keywords())} words. {mimic_db.has_extension(IdentityExtension)}")
 
@@ -67,10 +70,7 @@ def evaluate_estimator(estimator, keywords: List[str], use_cooc=False) -> Tuple[
         for q in keywords:
             est_value = estimator.estimate(q)
             actual_value = len(_full_identity.doc_ids(q))
-            print(est_value)
-            print(actual_value)
             current_error = ErrorMetric(est_value, actual_value)
-            #current_error = max(est_value, actual_value) / min(est_value, actual_value)  # q-error, naru paper, p. 8
             error_value_list.append(current_error)
     else:
         _full_coocc = mimic_db.get_extension(CoOccurrenceExtension)
@@ -79,7 +79,6 @@ def evaluate_estimator(estimator, keywords: List[str], use_cooc=False) -> Tuple[
                 est_value = estimator.estimate(keywords[i], keywords[j])
                 actual_value = _full_coocc.co_occurrence(keywords[i], keywords[j])
                 current_error = ErrorMetric(est_value, actual_value)
-                #current_error = max(est_value, actual_value) / min(est_value, actual_value)  # q-error, naru paper, p. 8
                 error_value_list.append(current_error)
 
     median = np.median(error_value_list)
@@ -128,16 +127,17 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, use_cooc=False):
             results_list.append(('KDE-' + str(known_data_rate),) + evaluate_estimator(kde_est, kw_sample, use_cooc))
 
             # UAE Estimator
-            uae_est = UaeRelationalEstimator(sample=sampled_db, full=mimic_db)
-            log.info('UAE')
-            results_list.append(
-                ('UAE-' + str(known_data_rate),) + evaluate_estimator(uae_est, kw_sample, use_cooc))
+            #uae_est = UaeRelationalEstimator(sample=sampled_db, full=mimic_db, nr_train_queries=200)
+            # 20000 training queries in UAE paper
+            #log.info('UAE')
+            #results_list.append(
+            #    ('UAE-' + str(known_data_rate) + '-200',) + evaluate_estimator(uae_est, kw_sample, use_cooc))
 
             # Neurocard Estimator
-            neurocard_est = NeurocardRelationalEstimator(sample=sampled_db, full=mimic_db)
-            log.info('Neurocard')
-            results_list.append(
-                ('Neurocard-' + str(known_data_rate),) + evaluate_estimator(neurocard_est, kw_sample, use_cooc))
+            #neurocard_est = NeurocardRelationalEstimator(sample=sampled_db, full=mimic_db)
+            #log.info('Neurocard')
+            #results_list.append(
+            #    ('Neurocard-' + str(known_data_rate),) + evaluate_estimator(neurocard_est, kw_sample, use_cooc))
 
             # NARU Estimator
             naru_est = NaruRelationalEstimator(sample=sampled_db, full=mimic_db)
@@ -153,5 +153,5 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, use_cooc=False):
     mimic_db.close()
 
 
-run_rlen_eval(nr_of_evals=1, nr_of_queries=20, use_cooc=False)
+run_rlen_eval(nr_of_evals=5, nr_of_queries=1000, use_cooc=False)
 # print(evaluate_actual_rlen(mimic_db.keywords()))

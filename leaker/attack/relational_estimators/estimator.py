@@ -13,6 +13,7 @@ from sklearn.neighbors import KernelDensity
 import torch
 import numpy as np
 
+from .naru import made
 from .naru.common import Table, CsvTable, TableDataset
 from .naru.estimators import ProgressiveSampling, CardEst
 from .naru.train_model import MakeMade, ReportModel, transformer, InitWeight, RunEpoch, Entropy, DEVICE
@@ -53,9 +54,14 @@ class NaruRelationalEstimator(RelationalEstimator):
     _table_dict: Dict[int, Tuple[Table, Table]]
     __epochs: int
     _estimator: Union[None, Dict[int, CardEst]] = None
-    __psample = 500
+    __hidden_size = [256] * 5  # or large MADE model: [512, 256, 512, 128, 1024]
+    __psample = 2000
+    __bs = 2048
+    __column_masking = False
+    __residual = True
+    __direct_io = True
 
-    def __init__(self, sample: RelationalDatabase, full: RelationalDatabase, epochs: int = 20):
+    def __init__(self, sample: RelationalDatabase, full: RelationalDatabase, epochs: int = 20):  # epochs 100 for large model
         self._table_dict = dict()
         self.__epochs = epochs
         super().__init__(sample, full)
@@ -92,9 +98,24 @@ class NaruRelationalEstimator(RelationalEstimator):
 
             table, full_table = self._table_dict[table_id]
 
-            model = MakeMade(256, table.columns, None)
+            #model = MakeMade(256, table.columns, None)
+            model = made.MADE(
+                nin=len(table.columns),
+                hidden_sizes=self.__hidden_size,
+                nout=sum([c.DistributionSize() for c in table.columns]),
+                input_bins=[c.DistributionSize() for c in table.columns],
+                input_encoding='binary',
+                output_encoding='one_hot',
+                embed_size=32,
+                do_direct_io_connections=self.__direct_io,
+                residual_connections=self.__residual,
+                #fixed_ordering=fixed_ordering,
+                column_masking=self.__column_masking,
+            ).to(DEVICE)
+
             ReportModel(model)
 
+            # TODO: we never use a transfomer, therefore if statements are not needed (ore use transformer later?)
             if not isinstance(model, transformer.Transformer):
                 model.apply(InitWeight)
 
@@ -122,15 +143,17 @@ class NaruRelationalEstimator(RelationalEstimator):
                                                  opt,
                                                  train_data=train_data,
                                                  val_data=train_data,
-                                                 batch_size=1024,
+                                                 batch_size=self.__bs,
                                                  epoch_num=epoch,
                                                  table_bits=table_bits,
                                                  return_losses=True
                                                  )
+
             #self.psample = len(self._dataset_sample.row_ids(table_id))
             estimator = ProgressiveSampling(model, table, self.__psample,
                                             device=torch.device(DEVICE),
-                                            cardinality=full_table.cardinality)
+                                            #cardinality=full_table.cardinality,
+                                            shortcircuit=self.__column_masking)
             self._estimator[table_id] = estimator
 
             print(f"Done.")
