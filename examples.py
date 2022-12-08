@@ -34,7 +34,7 @@ console.setFormatter(f)
 file = logging.FileHandler('examples.log', 'w', 'utf-8')
 file.setFormatter(f)
 
-logging.basicConfig(handlers=[console, file], level=logging.WARNING)
+logging.basicConfig(handlers=[console, file], level=logging.INFO)
 
 log = logging.getLogger(__name__)
 
