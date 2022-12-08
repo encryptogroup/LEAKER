@@ -19,7 +19,7 @@ from leaker.evaluation import KnownDatasetSampler, SampledDatasetSampler, Evalua
 from leaker.extension.selectivity import SelectivityExtension
 from leaker.extension.volume import VolumeExtension
 from leaker.pattern.cooccurrence import CoOccurrence
-from leaker.plotting import KeywordMatPlotLibSink, RangeMatPlotLibSink
+from leaker.plotting import KeywordMatPlotLibSink, RangeMatPlotLibSink, SampledMatPlotLibSink
 from leaker.preprocessing import Filter, Sink, Preprocessor
 from leaker.preprocessing.data import DirectoryEnumerator, RelativeFile, FileLoader, EMailParser, FileToDocument, \
     RelativeContainsFilter, UbuntuMailParser, DebianMailParser
@@ -299,12 +299,12 @@ query_space = AuxiliaryKnowledgeQuerySpace#PartialQueryLogSpace
 #print(data['frequencies'].shape)
 #attacks = [Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=0),Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=0.25),Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=0.5),Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=0.75),Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=1)]  # the attacks to evaluate
 attacks = [Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=0.5)]
-runs = 1  # Amount of evaluations
+runs = 5  # Amount of evaluations
 
 # From this, we can construct a simple EvaluationCase:
 evaluation_case = EvaluationCase(attacks=attacks, dataset=enron_db,runs=runs)#enron_db_restricted, runs=runs)
 
-kdr = [.5,.1,.01]  # known data rates
+kdr = [.5,.25,.1,.05,.01,.005]  # known data rates
 reuse = False  # If we reuse sampled datasets a number of times (=> we will have a 5x5 evaluation here)
 # From this, we can construct a DatasetSampler:
 #dataset_sampler = SampledDatasetSampler(training_set=ubuntu_db)
@@ -319,12 +319,12 @@ allow_repetition = True  # If queries can repeat
 query_selector = QuerySelector(query_space=query_space, selectivity=sel, query_space_size=qsp_size, queries=sample_size,
                                allow_repetition=allow_repetition, query_log=query_log)
 
-out_file = "sap_50-50_Sampled_Data_vol.png"  # Output file (if desired), will be stored in data/figures
+out_file = "sap_sampled.png"  # Output file (if desired), will be stored in data/figures
 
 # With these parameters, we can set up the Evaluator:
 eva = KeywordAttackEvaluator(evaluation_case=evaluation_case, dataset_sampler=dataset_sampler,
                              query_selector=query_selector,
-                             sinks=KeywordMatPlotLibSink(out_file=out_file), parallelism=8)
+                             sinks=SampledMatPlotLibSink(out_file=out_file), parallelism=8)
 
 # And then run it:
 eva.run()
