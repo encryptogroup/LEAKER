@@ -31,12 +31,14 @@ class MatPlotLibSink(DataSink, ABC):
         default: None
     """
     __markers: List[str]
+    _metric: Dict[float, float]
 
     _out_file: Optional[str]
     __data: Dict[str, Dict[int, Dict[float, List[float]]]]
 
-    def __init__(self, out_file: Optional[str] = None, markers: Optional[List[str]] = None):
+    def __init__(self, out_file: Optional[str] = None, markers: Optional[List[str]] = None, metric: Optional[Dict[float,float]] = []):
         self.__markers = markers or ['x', 'o', 's', 'D', '|', '+']
+        self._metric = metric
         self._out_file = out_file
         if self._out_file is not None:
             if self._out_file.count('.') > 1:
@@ -125,6 +127,12 @@ class SampledMatPlotLibSink(MatPlotLibSink):
         plt.grid(True)
 
         for x, y, series_id, y_min, y_max, marker in self.yield_plotpoints():
+            if len(self._metric) > 0:
+                assert(len(x) == len(self._metric))
+                x = np.array([self._metric[key] for key in x])
+                plt.xlabel('Statistical Closeness in %')
+                plt.xlim(45,105)
+                plt.xticks(np.linspace(50, 100, num=6))
 
             if not y_max.any() and not y_min.any():
                 plt.plot(x * 100, y, label=series_id, marker=marker, linewidth=1)

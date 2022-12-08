@@ -24,6 +24,8 @@ from leaker.preprocessing import Filter, Sink, Preprocessor
 from leaker.preprocessing.data import DirectoryEnumerator, RelativeFile, FileLoader, EMailParser, FileToDocument, \
     RelativeContainsFilter, UbuntuMailParser, DebianMailParser
 from leaker.whoosh_interface import WhooshWriter, WhooshBackend
+from leaker.stats import Statistics, StatisticsCase, QueryDistribution, QuerySelectivityDistribution, StatisticalCloseness,\
+    SelectivityDistribution, QueryDistributionResults, QuerySelectivityDistributionResults
 
 f = logging.Formatter(fmt='{asctime} {levelname:8.8} {process} --- [{threadName:12.12}] {name:32.32}: {message}',
                       style='{')
@@ -283,6 +285,10 @@ enron_db: Dataset = backend.load_dataset("enron_sent")
 
 #tair_db = backend_d.load_dataset("tair_gd")
 
+stat = StatisticalCloseness(co_sim=True, out_file='stat_close_demo.png', print_output=True)
+metric = stat.compute_metric([(ubuntu_db, enron_db),(ubuntu_db, debian_db),(enron_db, [.5,.1,.01])])
+print(metric)
+
 data: dict = None
 with open("/home/user/Documents/LEAKER/LEAKER/data_sources/Google_Trends/aux_knowledge.pkl",'rb') as f:
     data = pkl.load(f)
@@ -304,7 +310,7 @@ runs = 5  # Amount of evaluations
 # From this, we can construct a simple EvaluationCase:
 evaluation_case = EvaluationCase(attacks=attacks, dataset=enron_db,runs=runs)#enron_db_restricted, runs=runs)
 
-kdr = [.5,.25,.1,.05,.01,.005]  # known data rates
+kdr = [.5,.25,.1,.05,.03,.01,.0075]  # known data rates
 reuse = False  # If we reuse sampled datasets a number of times (=> we will have a 5x5 evaluation here)
 # From this, we can construct a DatasetSampler:
 #dataset_sampler = SampledDatasetSampler(training_set=ubuntu_db)
@@ -312,19 +318,19 @@ dataset_sampler = SampledDatasetSampler(kdr_samples=kdr, reuse=reuse)
 # The query space to populate. Here, we use partial sampling from
 # the data collection. With a query log, a QueryLogSpace is used.
 sel = Selectivity.High  # When sampling queries, we use high selectivity keywords
-qsp_size = 150  # Size of the query space
+qsp_size = 500  # Size of the query space
 sample_size = 100  # Amount of queries attacked at a time (sampled from the query space)
 allow_repetition = True  # If queries can repeat
 # From this, we can construct a QuerySelector:
 query_selector = QuerySelector(query_space=query_space, selectivity=sel, query_space_size=qsp_size, queries=sample_size,
                                allow_repetition=allow_repetition, query_log=query_log)
 
-out_file = "sap_sampled.png"  # Output file (if desired), will be stored in data/figures
+out_file = "sap_sampled4.png"  # Output file (if desired), will be stored in data/figures
 
 # With these parameters, we can set up the Evaluator:
 eva = KeywordAttackEvaluator(evaluation_case=evaluation_case, dataset_sampler=dataset_sampler,
                              query_selector=query_selector,
-                             sinks=SampledMatPlotLibSink(out_file=out_file), parallelism=8)
+                             sinks=SampledMatPlotLibSink(out_file=out_file, metric=metric), parallelism=8)
 
 # And then run it:
 eva.run()

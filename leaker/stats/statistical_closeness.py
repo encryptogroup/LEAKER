@@ -52,13 +52,15 @@ class StatisticalCloseness():
     __stepsize: int
     __co_sim: bool
     __out_file: str
+    __print_output: bool
 
-    def __init__(self, min_n:int = 10, max_n: int = 10000, stepsize: int = 10, co_sim: bool = False, out_file: str = None) -> None:
+    def __init__(self, min_n:int = 10, max_n: int = 10000, stepsize: int = 10, co_sim: bool = False, out_file: str = None, print_output: bool = False) -> None:
         self.__min_n = min_n
         self.__max_n = max_n
         self.__stepsize = stepsize
         self.__co_sim = co_sim
         self.__out_file = out_file
+        self.__print_output = print_output
         if self.__out_file is not None:
             if '.' in self.__out_file:
                 self.__out_file = self.__out_file.split('.')[0]
@@ -74,6 +76,7 @@ class StatisticalCloseness():
         processed = []
         datasets = []
         names = []
+        sample_size = []
         for tup in data:
             if self.__co_sim:
                 tup[0].extend_with(CoOccurrenceExtension)
@@ -83,6 +86,7 @@ class StatisticalCloseness():
                 train = tup[0]
                 test = tup[1]
                 names.append(train.name()+" - "+test.name())
+                sample_size.append(train.name()+" - "+test.name())
                 if len(train) < len(test):
                     test = test.restrict_keyword_size(len(train),selectivity=Selectivity.High)
                 elif len(test) < len(train):
@@ -95,6 +99,7 @@ class StatisticalCloseness():
                 processed.append((self._get_kw_list(train),self._get_kw_list(test)))
                 names.append(tup[0].name()+" sampled "+str(rate))
                 datasets.append((train,test))
+                sample_size.append(tup[1])
             else:
                 dataset_sampler = SampledDatasetSampler(kdr_samples=tup[1])
                 result = list(dataset_sampler.sample([tup[0]]))
@@ -102,7 +107,8 @@ class StatisticalCloseness():
                     processed.append((self._get_kw_list(train),self._get_kw_list(test)))
                     names.append(tup[0].name()+" sampled "+str(rate))
                     datasets.append((train,test))
-        return processed, names, datasets
+                sample_size+=tup[1]
+        return processed, names, datasets, sample_size
 
 
     def _get_n_most_common(self, dataset:list, n:int, isSet: bool=True) -> set:
@@ -268,7 +274,7 @@ class StatisticalCloseness():
                 (2) the statistical closeness of the dataset sampled to the given rate
                 (3) the statistical closeness of the dataset sampled to all rates given in the list
     """
-        data, names, datasets = self._process_data(input_data)
+        data, names, datasets, sample_size = self._process_data(input_data)
         min_ds_len = min(list(map(len,[kw for ds in data for kw in ds])))
         if min_ds_len < self.__max_n:
             log.warning(f"Reducing maximum number of keywords to smallest dataset size of {min_ds_len}.")
@@ -293,25 +299,26 @@ class StatisticalCloseness():
 
         for idx in range(len(means)):
             scm_err_stat.append(self._error_propagation(means[idx],errors[idx]))
-
-        print("Metric")
-        for i in range(len(scm_val)):
-            print(names[i],": ",scm_val[i],"+/-",scm_err_stat[i],"+/-",scm_err_sys[i])
-        
-        print("CR 1")
-        for i in range(len(means_cr1)):
-            print(names[i],": ",means_cr1[i],"+/-",errors_cr1[i])
-        
-        print("CR 2")
-        for i in range(len(means_cr2)):
-            print(names[i],": ",means_cr2[i],"+/-",errors_cr2[i])
-        
-        print("CR 3")
-        for i in range(len(means_cr3)):
-            print(names[i],": ",means_cr3[i],"+/-",errors_cr3[i])
+        if self.__print_output:
+            print("Metric")
+            for i in range(len(scm_val)):
+                print(names[i],": ",scm_val[i],"+/-",scm_err_stat[i],"+/-",scm_err_sys[i])
+            
+            print("CR 1")
+            for i in range(len(means_cr1)):
+                print(names[i],": ",means_cr1[i],"+/-",errors_cr1[i])
+            
+            print("CR 2")
+            for i in range(len(means_cr2)):
+                print(names[i],": ",means_cr2[i],"+/-",errors_cr2[i])
+            
+            print("CR 3")
+            for i in range(len(means_cr3)):
+                print(names[i],": ",means_cr3[i],"+/-",errors_cr3[i])
 
         if self.__co_sim:
-            print("Co-Occurrence Similarity")
+            if self.__print_output:
+                print("Co-Occurrence Similarity")
             for i, (train,test) in enumerate(datasets):
                 if self.__max_n > 2000:
                     n_kw = 2000
@@ -320,9 +327,11 @@ class StatisticalCloseness():
                 kw_lst = self._get_n_most_common(data[i][0],n_kw,False)
                 cs = self._co_sim(train,test,kw_lst)
                 co_sims.append(cs)
-                print(names[i],": ",cs)
+                if self.__print_output:
+                    print(names[i],": ",cs)
         
         self._plot_metric(scm_val,scm_err_stat,scm_err_sys,names,co_sims)
         self._plot_cr1_2(results_cr1,names,"CR 1")
         self._plot_cr1_2(results_cr2,names,"CR 2")
         self._plot_cr3(results_cr3,names)
+        return dict(zip(sample_size, scm_val))
