@@ -592,7 +592,7 @@ class GoogleLogParser(JSONParser):
 
 class UbuntuMailParser(EMailParser):
     """
-    A parser for .mbox e-mail files aiming at excluding e-mail headers, e-mail addresses and placeholders inserted for
+    A parser for .mbox  and .txt e-mail files aiming at excluding e-mail headers, e-mail addresses and placeholders inserted for
     images.
     """
 
@@ -634,7 +634,7 @@ class UbuntuMailParser(EMailParser):
 
 class DebianMailParser(EMailParser):
     """
-    A parser for .mbox e-mail files aiming at excluding e-mail headers, e-mail addresses and placeholders inserted for
+    A parser for .mbox and .txt e-mail files aiming at excluding e-mail headers, e-mail addresses and placeholders inserted for
     images.
     """
 
