@@ -297,7 +297,8 @@ query_space = AuxiliaryKnowledgeQuerySpace#PartialQueryLogSpace
 
 # We can evaluate according to many criteria:
 #print(data['frequencies'].shape)
-attacks = [Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=0),Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=0.25),Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=0.5),Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=0.75),Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=1)]  # the attacks to evaluate
+#attacks = [Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=0),Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=0.25),Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=0.5),Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=0.75),Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=1)]  # the attacks to evaluate
+attacks = [Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=0.5)]
 runs = 5  # Amount of evaluations
 
 # From this, we can construct a simple EvaluationCase:
