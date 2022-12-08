@@ -40,12 +40,20 @@ def compute_log_binomial_probability_matrix(ntrials, probabilities, observations
     probabilities = np.array(probabilities)
     probabilities[probabilities == 0] = min(probabilities[
                                                 probabilities > 0]) / 100  # To avoid numerical errors. An error would mean the adversary information is very off.
+    probabilities[probabilities == 1] = max(probabilities[
+                                                probabilities <1])  # To avoid numerical errors. An error would mean the adversary information is very off.
     log_binom_term = np.array([_log_binomial(ntrials, obs / ntrials) for obs in observations])  # ROW TERM
     column_term = np.array([np.log(probabilities) - np.log(1 - np.array(probabilities))]).T  # COLUMN TERM
     last_term = np.array([ntrials * np.log(1 - np.array(probabilities))]).T  # COLUMN TERM
     log_matrix = log_binom_term + np.array(observations) * column_term + last_term
     return log_matrix
 
+def compute_frequencies(ql:KeywordQueryLog):
+    kw_lst = ql.keywords_list()
+    kw_counter = Counter(kw_lst).most_common()
+    chosen_keywords = [kw for kw, _ in kw_counter]
+    frequencies = np.array([count for _, count in kw_counter])[:,None]/sum(count for _, count in kw_counter)
+    return frequencies, chosen_keywords
 
 class Sap(KeywordAttack):
     """
@@ -58,10 +66,9 @@ class Sap(KeywordAttack):
     _delta: float
     _known_f_matrix: np.ndarray
     _chosen_keywords: List[str]
-    _freq: bool = False
     _alpha: float
 
-    def __init__(self, known: Dataset, known_frequencies: np.ndarray = None, chosen_keywords: List[str] = None, alpha:float = 0.0):
+    def __init__(self, known: Dataset, known_frequencies: np.ndarray = None, chosen_keywords: List[str] = None, query_log: KeywordQueryLog = None, alpha:float = 0.0):
         super(Sap, self).__init__(known)
 
         self._delta = known.sample_rate()
@@ -74,27 +81,32 @@ class Sap(KeywordAttack):
             known.extend_with(VolumeExtension)
 
         vol = known.get_extension(VolumeExtension)
+        
+        if known_frequencies is not None:
+            assert chosen_keywords is not None, log.error("Auxiliary frequency knowledge and correstponding keywords needed for SAP frequency attack.")
+            self._known_f_matrix = known_frequencies
+            self._chosen_keywords = chosen_keywords
+        elif query_log is not None:
+            known_frequencies, chosen_keywords = compute_frequencies(query_log)
+            self._known_f_matrix = known_frequencies
+            self._chosen_keywords = chosen_keywords
+        else:
+            assert alpha == 0, log.error("Auxiliary frequency knowledge and correstponding keywords needed for SAP frequency attack.")
+            if chosen_keywords is not None:
+                self._chosen_keywords = chosen_keywords
+            else:
+                self._chosen_keywords = list(known.keywords())
+        self._alpha = alpha
+
         i = 0
-        for keyword in chosen_keywords:
+        for keyword in self._chosen_keywords:
             self._known_keywords[i] = keyword
             self._known_keywords[keyword] = i
             i += 1
             self._known_volume[keyword] = vol.total_volume(keyword)
             self._known_response_length[keyword] = vol.selectivity(keyword)
-        
-        if chosen_keywords is not None:
-            assert known_frequencies is not None, log.error("Auxiliary frequency knowledge needed for SAP frequency attack.")
-            self._freq = True
-        self._known_f_matrix = known_frequencies
-        self._chosen_keywords = chosen_keywords
-        self._alpha = alpha
 
-        # if known_frequencies is not None:
-        #     self._freq = True
-        #     if chosen_keywords is not None:
-        #         self._chosen_keywords = chosen_keywords
-        #         log.info("Using List of chosen keywords as additional auxiliary knowledge")
-        #     else: chosen_keywords = list(known.keywords())
+
 
     @classmethod
     def name(cls) -> str:
@@ -116,17 +128,8 @@ class Sap(KeywordAttack):
                                                                   tvols)
         cost_vol = - log_prob_matrix
         return cost_vol
-
-    def _build_cost_rlen(self, n: int, rlens: List[int]):
-
-        kw_probs_train = [self._known_response_length[self._known_keywords[i]] / len(self._known().doc_ids())
-                          for i in range(len(self._known().keywords()))]
-        log_prob_matrix = compute_log_binomial_probability_matrix(n, kw_probs_train,
-                                                                  rlens)
-        cost_vol = - log_prob_matrix
-        return cost_vol
     
-    def _build_cost_rlen2(self, n: int, tag_info):
+    def _build_cost_rlen(self, n: int, tag_info):
         kw_probs_train = [self._known_response_length[self._known_keywords[i]] / len(self._known().doc_ids())
                           for i in range(len(self._chosen_keywords))]
         kw_counts_test = [len(tag_info[tag]) for tag in tag_info]
@@ -135,24 +138,7 @@ class Sap(KeywordAttack):
         cost_vol = - log_prob_matrix
         return cost_vol
 
-
-    def _build_cost_freq(self, freqs:np.ndarray):
-        n_queries_week = 5
-        n_weeks = freqs.shape[1]
-        print(self._known_f_matrix.shape)
-        print(freqs.shape)
-        log_c_matrix = np.zeros((len(freqs), len(self._known_f_matrix)))
-        print(log_c_matrix.shape)
-        known_probs = self._known_f_matrix.copy()
-        known_probs[known_probs==0] = min(known_probs[known_probs>0])/100
-        obs_probs = freqs.copy()
-        obs_probs[obs_probs==0] = min(obs_probs[obs_probs>0])/100
-        for i_week in range(n_weeks):
-            log_c_matrix += (n_queries_week * obs_probs[:, i_week]) * np.log(known_probs[:, i_week].T) 
-        cost_freq = - log_c_matrix
-        return cost_freq
-
-    def _split_traces(self, queries:List[str],n_queries_per_week: int=10):
+    def _split_traces(self, queries:List[str],n_queries_per_week: int=5):
         weekly_queries = []
         for query_start_idx in range(0,len(queries),n_queries_per_week):
             weekly_queries.append(queries[query_start_idx:query_start_idx+n_queries_per_week])
@@ -186,7 +172,7 @@ class Sap(KeywordAttack):
                     tag_trend_matrix[key, i_week] = counter[key] / len(weekly_tags)
         return tag_trend_matrix
 
-    def _build_cost_freq2(self, trends, nq_per_week):
+    def _build_cost_freq(self, trends, nq_per_week):
         log_c_matrix = np.zeros((len(self._known_f_matrix), len(trends)))
         for i_week, nq in enumerate(nq_per_week):
             probabilities = self._known_f_matrix[:, i_week].copy()
@@ -198,36 +184,28 @@ class Sap(KeywordAttack):
         log.info(f"Running {self.name()} at {self._delta:.3f}")
         queries = list(queries)
         n_docs_test = len(dataset.doc_ids())
-        n_docs_train = len(self._known().doc_ids())
         rid = ResponseIdentity()
         tag_traces,tag_info = self._process_traces(rid(dataset, queries))
         tag_trends = self._build_trend_matrix(tag_traces,len(tag_info))
         nq_per_week = [len(trace) for trace in tag_traces]
-        #freq = self._build_cost_freq2(tag_trends, nq_per_week)
-        
-        leakage = list(zip(self.required_leakage()[0](dataset, queries), self.required_leakage()[1](dataset, queries)))
-        dataset.extend_with(VolumeExtension)
-        dtv = dataset.get_extension(VolumeExtension)
-
-
 
         if self._alpha == 0:
-            total_cost = self._build_cost_rlen2(n_docs_test,tag_info)
+            total_cost = self._build_cost_rlen(n_docs_test,tag_info)
         elif self._alpha == 1:
-            total_cost = self._build_cost_freq2(tag_trends, nq_per_week)
+            weeks = self._known_f_matrix.shape[1]
+            n_weeks = len(nq_per_week)
+            if weeks == 1 and weeks != n_weeks:
+                self._known_f_matrix = np.repeat(self._known_f_matrix,n_weeks,axis=1)
+
+            total_cost = self._build_cost_freq(tag_trends, nq_per_week)
         else:
-            freq = self._build_cost_freq2(tag_trends, nq_per_week)
-            rlen = self._build_cost_rlen2(n_docs_test,tag_info)
+            weeks = self._known_f_matrix.shape[1]
+            n_weeks = len(nq_per_week)
+            if weeks == 1 and weeks != n_weeks:
+                self._known_f_matrix = np.repeat(self._known_f_matrix,n_weeks,axis=1)
+            freq = self._build_cost_freq(tag_trends, nq_per_week)
+            rlen = self._build_cost_rlen(n_docs_test,tag_info)
             total_cost = self._alpha*freq + (1-self._alpha)*rlen
-
-        #tvol_cost = self._build_cost_tvol(dtv.dataset_volume(),tvols=[l[0] for l in leakage])  # * tv.dataset_volume() / dtv.dataset_volume()
-        #rlen_cost = self._build_cost_rlen(n_docs_test, rlens=[l[1] for l in leakage])
-        #rlen = self._build_cost_rlen2(n_docs_test,tag_info)#rlens=[l[1] for l in leakage])
-        # freqs = self.required_leakage()[2](dataset,weekly_queries)
-        #freq_cost = self._build_cost_freq(freqs)
-
-        #total_cost = 0.5*freq+0.5*rlen#0.5*freq+0.5*rlen_cost#alpha*freq_cost + (1-alpha)*rlen_cost#0.5 * tvol_cost + 0.5 * rlen_cost
-
 
         row_ind, col_ind = hungarian(total_cost)
 
@@ -237,10 +215,11 @@ class Sap(KeywordAttack):
         query_predictions_for_each_obs = []
         for weekly_tags in tag_traces:
             query_predictions_for_each_obs.append([query_predictions_for_each_tag[tag_id] for tag_id in weekly_tags])
-        #queries_tagged = [self._chosen_keywords.index(kw) for kw in queries]
         weekly_queries = self._split_traces(queries,5)
         pred = [self._chosen_keywords[kw] for week_kw in query_predictions_for_each_obs for kw in week_kw]
+
         flat_real = [kw for week_kws in weekly_queries for kw in week_kws]
         accuracy = np.mean(np.array([1 if real == prediction else 0 for real, prediction in zip(flat_real, pred)]))
         print("SAP alpha",self._alpha,"=",accuracy)
+
         return pred
