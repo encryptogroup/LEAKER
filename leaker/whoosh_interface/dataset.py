@@ -11,7 +11,7 @@ import dill as pickle
 from collections import Counter
 from functools import reduce
 from logging import getLogger
-from math import ceil
+from math import ceil, floor
 from os import path
 from random import sample, shuffle
 from typing import Set, Iterator, Optional, List, TypeVar, Type, Any, Dict
@@ -120,7 +120,7 @@ class WhooshDataset(Dataset):
 
     def name(self) -> str:
         return self.__name
-
+    
     def query(self, keyword: str, stemmed: bool = True) -> Iterator[Document]:
         yield from self._query_cache[str(self.__query(keyword, stemmed))]
 
@@ -129,6 +129,9 @@ class WhooshDataset(Dataset):
 
     def keywords(self) -> Set[str]:
         return self.__keywords
+    
+    def keyword_counts(self) -> Counter:
+        return Counter([kw for doc in self._keyword_cache.values() for kw in doc])
 
     def doc_ids(self) -> Set[str]:
         return self._doc_ids
@@ -151,15 +154,16 @@ class WhooshDataset(Dataset):
         return SampledWhooshDataset(self, rate, doc_ids=set(sample(population=self._doc_ids, k=sample_size)))
     
     def sample_test_training(self, rate: float) -> Dataset:
-        if rate > 0.9 or rate < 0.1:
-            raise ValueError("Sample rate must be in [0.1, 0.9]")
+        if rate > 0.5 or rate < 0:
+            raise ValueError("Sample rate must be in [0,0.5]")
 
-        sample_size = ceil(len(self._doc_ids) * rate)
+        sample_size = floor(len(self._doc_ids) * rate)
 
         training_ids = set(sample(population=self._doc_ids, k=sample_size))
-        test_ids = set(self._doc_ids).difference(training_ids)
+        remaining_ids = set(self._doc_ids).difference(training_ids)
+        test_ids = set(sample(population=remaining_ids, k=sample_size))
 
-        return (SampledWhooshDataset(self, rate, doc_ids=training_ids), SampledWhooshDataset(self, 1-rate, doc_ids=test_ids))
+        return (SampledWhooshDataset(self, rate, doc_ids=training_ids), SampledWhooshDataset(self, rate, doc_ids=test_ids))
 
     def sample_rate(self) -> float:
         return 1.
@@ -629,7 +633,9 @@ class WhooshKeywordQueryLog(KeywordQueryLog):
             self.__searcher = None
 
     def sample(self, sample_rate):
-        return self.__keyword_cache.sample(sample_rate)
+        qc__train, qc_test = self.__keyword_cache.sample(sample_rate)
+        return SampledWhooshKeywordQueryLog(self.name()+"_train",self.__index,query_cache=qc__train), \
+            SampledWhooshKeywordQueryLog(self.name()+"_test",self.__index,query_cache=qc_test)
 
     def __del__(self):
         self.__exit__(None, None, None)
@@ -668,3 +674,80 @@ class WhooshKeywordQueryLog(KeywordQueryLog):
     @staticmethod
     def __doc(hit: Hit) -> Document:
         return Document(hit['doc_id'], -1)
+
+
+class SampledWhooshKeywordQueryLog(WhooshKeywordQueryLog):
+    """
+    A `KeywordQueryLog` implementation relying on a Whoosh index. This class should not be created directly but only loaded
+    using the `WhooshBackend`.
+
+    It can be used in a context manager to keep an `IndexSearcher` open for the whole time which saves time when doing
+    multiple queries.
+
+    It keeps track of already performed queries in a query cache that is stored in a pickle file for future use.
+
+    Parameters
+    ----------
+    name: str
+        the name of the query log (index)
+    index: FileIndex
+        the opened Whoosh index
+    pickle_description: str
+        If a specific pickle file should be used for the query cache (identified by the description).
+    min_user_count: int, max_user_count: int
+        If given, only consider queries of most_freq_users[min_user_count:max_user_count]
+    reverse: bool
+        If True, consider queries of least_freq_users[min_user_count:max_user_count] with
+        min activity MIN_USER_QUERYLOG_ACTIVITY
+    """
+
+    __name: str
+
+    __index: FileIndex
+    __searcher: Optional[Searcher]
+
+    __doc_ids: Set[str]
+    __keywords_list: List[str]
+    __user_ids: List[str]
+
+    __query_cache: Cache[str, List[Document]]
+    __initial_query_cache_size: int
+    __keyword_cache: Cache[str, List[str]]
+
+    __pickle_filename: str
+
+    def __init__(self, name: str, index: FileIndex, pickle_description: str = None, min_user_count: int = 0,
+                 max_user_count: int = None, reverse: bool = False, query_cache:Cache = None):
+
+        idx = 0
+        pickle_description = str(idx).zfill(3)
+        self.__pickle_filename = Data.pickle_filename(name, pickle_description)
+        while path.exists(self.__pickle_filename):       
+            idx += 1
+            pickle_description = str(idx).zfill(3)
+            self.__pickle_filename = Data.pickle_filename(name, pickle_description)   
+
+        self.__name = name
+        self.__index = index
+
+        self.__searcher = None
+        self.__query_parser = QueryParser("user_id", QueryLogIndexSchema())
+        self.__initial_query_cache_size = 0
+
+        log.info(f"Loading Whoosh Query Log '{name}'")
+
+        if query_cache is not None:
+            log.info(f"Found input query cache for {name}. Loading that...")
+            self.__query_cache = query_cache
+            self.pickle()
+        else:
+            log.warning("Cannot build query log without query cache.")
+        
+        super(SampledWhooshKeywordQueryLog, self).__init__(name, index, pickle_description,min_user_count,max_user_count,reverse)
+
+    def pickle(self) -> None:
+        if len(self.__query_cache) > self.__initial_query_cache_size:
+            self.__query_cache.pickle(self.__pickle_filename)
+            self.__initial_query_cache_size = len(self.__query_cache)
+            print(self.__initial_query_cache_size)
+            log.info(f"Stored query cache for {self.__name} in {self.__pickle_filename}")

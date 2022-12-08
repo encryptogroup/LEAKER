@@ -304,7 +304,7 @@ runs = 1  # Amount of evaluations
 # From this, we can construct a simple EvaluationCase:
 evaluation_case = EvaluationCase(attacks=attacks, dataset=enron_db,runs=runs)#enron_db_restricted, runs=runs)
 
-kdr = [.5]  # known data rates
+kdr = [.5,.1,.01]  # known data rates
 reuse = False  # If we reuse sampled datasets a number of times (=> we will have a 5x5 evaluation here)
 # From this, we can construct a DatasetSampler:
 #dataset_sampler = SampledDatasetSampler(training_set=ubuntu_db)
