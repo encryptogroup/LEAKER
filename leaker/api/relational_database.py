@@ -130,6 +130,43 @@ class RelationalDatabase(Dataset):
         """The rate at which this data set was sampled, relative to the full data set"""
         raise NotImplementedError
 
+    @abstractmethod
+    def restrict_keyword_size(self, max_keywords: int = 0,
+                              selectivity: Selectivity = Selectivity.Independent,
+                              tables: Optional[Iterable[Union[str, int]]] = None) -> 'Dataset':
+        """
+        Restricts this data set to the given amount of keywords. Contrary to sampling, the restriction method returns a
+        full data set that acts accordingly, i.e., that is not yet sampled. This method is used to restrict big data
+        sets to subsets used as basis for evaluations.
+
+        Parameters
+        ----------
+        max_keywords : int
+            the keyword set size to restrict to
+        selectivity: Selectivity
+            determines the selectivity by which the keywords are chosen
+        tables: Optional[Iterable[Union[str, int]]]
+            tables or their identifiers that should not be restricted
+         """
+        raise NotImplementedError
+
+    @abstractmethod
+    def restrict_rate(self, rate: float, tables: Optional[Iterable[Union[str, int]]] = None) -> 'Dataset':
+        """
+        Restricts this data set to the given percentage. The rate must be in [0, 1]. Other values must be rejected by
+        this method. Contrary to sampling, the restriction method returns a full data set that acts accordingly, i.e.,
+        that is not yet sampled. This method is used to restrict big data sets to representative subsets used as basis
+        for evaluations.
+
+        Parameters
+        ----------
+        rate : float
+            the restriction rate in [0, 1]
+        tables: Optional[Iterable[Union[str, int]]]
+            tables or their identifiers that should not be restricted
+        """
+        raise NotImplementedError
+
     def __call__(self, query: RelationalQuery) -> Iterator[Tuple[int, int]]:
         yield from self.query(query)
 
