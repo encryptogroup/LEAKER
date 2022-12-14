@@ -426,6 +426,8 @@ class RestrictedSQLRelationalDatabase(SQLRelationalDatabase):
         return self
 
     def query(self, q: RelationalQuery) -> Iterator[Tuple[int, int]]:
+        if not self.__parent.is_open():
+            self.__parent.open()
         for row in self.__parent.query(q):
             if row in self.row_ids():
                 yield row
