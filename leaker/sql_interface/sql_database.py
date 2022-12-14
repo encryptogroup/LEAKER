@@ -4,16 +4,16 @@ For License information see the LICENSE file.
 Authors: Amos Treiber
 
 """
+from collections import Counter
 from logging import getLogger
 from math import ceil
-from random import sample
-from typing import Set, Iterator, Optional, Union, Tuple, List, Dict, TypeVar, Type
+from random import sample, shuffle
+from typing import Set, Iterator, Optional, Union, Tuple, List, Dict, TypeVar, Type, Iterable
 
 from ..api import RelationalDatabase, RelationalQuery, Extension
 from ..api.constants import MYSQL_IDENTIFIER, Selectivity
 from . import SQLConnection
 from ..extension import IdentityExtension, SelectivityExtension
-
 
 log = getLogger(__name__)
 T = TypeVar("T", bound=Extension, covariant=True)
@@ -208,13 +208,43 @@ class SQLRelationalDatabase(RelationalDatabase):
         self._sql_connection.close()
 
     def restrict_keyword_size(self, max_keywords: int = 0,
-                              selectivity: Selectivity = Selectivity.Independent) -> 'SQLRelationalDatabase':
-        """TODO: Implement restriction"""
-        pass
+                              selectivity: Selectivity = Selectivity.Independent,
+                              tables: Optional[Iterator[Union[str, int]]] = None) -> 'SQLRelationalDatabase':
+        if max_keywords <= 0:
+            raise ValueError("Max keywords must be > 0")
 
-    def restrict_rate(self, rate: float) -> 'SQLRelationalDatabase':
-        """TODO: Implement restriction"""
-        pass
+        ignored_tables = set()
+        if tables is not None:
+            for t in tables:
+                if isinstance(t, str):
+                    ignored_tables.add(self._tables_ids[t])
+                else:
+                    ignored_tables.add(t)
+
+        for table_id in self._tables:
+            if table_id not in ignored_tables:
+                if max_keywords >= len(self.queries(table=table_id)):
+                    raise ValueError("Max keywords must be < than the available queries")
+
+        return RestrictedSQLRelationalDatabase(self, max_keywords=max_keywords, selectivity=selectivity,
+                                               ignored_tables=ignored_tables)
+
+    def restrict_rate(self, rate: float, tables: Optional[Iterator[Union[str, int]]] = None) -> 'SQLRelationalDatabase':
+        if rate > 1 or rate < 0:
+            raise ValueError("Restrict rate must be in (0, 1]")
+
+        if rate == 1:
+            return self
+
+        ignored_tables = set()
+        if tables is not None:
+            for t in tables:
+                if isinstance(t, str):
+                    ignored_tables.add(self._tables_ids[t])
+                else:
+                    ignored_tables.add(t)
+
+        return RestrictedSQLRelationalDatabase(self, restriction_rate=rate, ignored_tables=ignored_tables)
 
     def restriction_rate(self) -> float:
         return 1
@@ -247,7 +277,7 @@ class SQLRelationalDatabase(RelationalDatabase):
     def sample_rate(self) -> float:
         return 1
 
-    def selectivity(self,  query: RelationalQuery) -> int:
+    def selectivity(self, query: RelationalQuery) -> int:
         if self.has_extension(SelectivityExtension):
             if query in self.get_extension(SelectivityExtension).get_identity_cache().keys():
                 return self.get_extension(SelectivityExtension).selectivity(query)
@@ -266,6 +296,118 @@ class SQLRelationalDatabase(RelationalDatabase):
 
     def parent(self) -> 'SQLRelationalDatabase':
         return self
+
+
+class RestrictedSQLRelationalDatabase(SQLRelationalDatabase):
+    """
+    A restricted sample of a `SQLRelationalDatabase`. It restricts all results to a random subset at a given rate, or a
+    specified maximum amount of keywords.
+
+    When extending a data set of this type with an `Extension`, only this data set will be extended.
+    This distinguishes a RestrictedSQLRelationalDatabase from a sampled one: the former is used as an actual restricted basis
+    for sampling to reduce big data sets, while the latter is used to simulate restricted knowledge of a given data set
+    (but still computes on the whole data set).
+
+    Parameters
+    ----------
+    parent: SQLRelationalDatabase
+        the full data set
+    max_keywords: int
+        If not 0, restrict the keyword space of the tables to max_keywords keywords using random shuffling of the set
+        of keywords (if random_shuffling) or most common max_keywords. Each table is restricted independently.
+    selectivity: Selectivity
+        If max_keywords is not 0, this determines the selectivity by which the keywords are chosen
+    restriction_rate : float
+        list of the restriction rate in (0,1). Each (not ignored) table is restricted to this size.
+    ignored_tables: Optional[Iterable[int]]
+        tables that should not be restricted
+    """
+    __parent: SQLRelationalDatabase
+
+    __restriction_rate: float
+
+    def __init__(self, parent: SQLRelationalDatabase, max_keywords: int = 0,
+                 selectivity: Selectivity = Selectivity.Independent,
+                 restriction_rate: float = 1.0,
+                 ignored_tables: Optional[Iterable[int]] = None):
+        if max_keywords != 0 and restriction_rate != 1.0:
+            raise ValueError("Cannot restrict a SQLRelationalDatabase to both max keywords and a rate!")
+
+        self._samples = []
+        self._restricted = []
+
+        self.__restriction_rate = restriction_rate
+
+        if max_keywords:
+            log.info(f'Restricting Dataset to {restriction_rate * 100}%')
+            name = f'{parent.name()}%{restriction_rate}'
+        else:
+            log.info(f'Restricting Dataset to {max_keywords} keywords')
+            name = f'{parent.name()}|{max_keywords}'
+        self.__parent = parent
+
+        for table_id in self._tables:
+            if table_id not in ignored_tables:
+                self._table_row_ids[table_id] = set(sample(parent._table_row_ids[table_id],
+                                                           ceil(self.__restriction_rate *
+                                                                len(parent._table_row_ids[table_id]))))
+        self._queries = dict()
+        for query_key, query_value in parent._queries.items():
+            if query_key in self._table_row_ids.values():
+                self._queries[query_key] = query_value
+
+        if max_keywords:
+            all_queries: List[RelationalQuery] = list()
+            for query_list in self._queries.values():
+                for query in query_list:
+                    if query.table not in ignored_tables:
+                        all_queries.append(query)
+            if selectivity == Selectivity.High:
+                queries_restricted = set([k for k, _ in Counter(all_queries).most_common(max_keywords)])
+            elif selectivity == Selectivity.Low:
+                queries_restricted = set([k for k, _ in Counter(all_queries).most_common()[:-max_keywords - 1:-1]])
+            elif selectivity == Selectivity.PseudoLow:
+                queries_restricted = set(sorted(filter(lambda key: 10 <= self.__parent.selectivity(key), all_queries),
+                                                key=self.__parent.selectivity)[:max_keywords])
+            else:  # selectivity == Selectivity.Independent:
+                all_queries = list(set(all_queries))
+                shuffle(all_queries)
+                queries_restricted = set(all_queries[:max_keywords])
+
+            # We also have to restrict the queries and table_row_ids set *again* to only include the relevant queries
+            for (table_id, row_id), query_value in self._queries.items():
+                if table_id not in ignored_tables:
+                    if query_value not in queries_restricted:
+                        self._queries.pop((table_id, row_id))
+            for key, table_row_id in self._table_row_ids.items():
+                if table_row_id in self._queries:
+                    self._table_row_ids.pop(key)
+
+        super(RestrictedSQLRelationalDatabase, self).__init__(name, True)
+
+        self._set_extensions(map(lambda ext: ext.sample(self), parent._get_extensions()))
+
+        log.info(f"Restricting SQLRelational Index '{parent.name()}' complete")
+
+    def restriction_rate(self) -> float:
+        return self.__restriction_rate
+
+    def extend_with(self, extension: Type[T], **kwargs) -> 'RestrictedSQLRelationalDatabase':
+        if not self.has_extension(extension):
+            if not self.__parent.has_extension(extension):
+                self.__parent.extend_with(extension, **kwargs)
+
+            new_ext = self.__parent.get_extension(extension)
+
+            extensions = self._get_extensions()
+            extensions.append(new_ext.sample(self))
+            self._set_extensions(extensions)
+        return self
+
+    def query(self, q: RelationalQuery) -> Iterator[Tuple[int, int]]:
+        for row in self.__parent.query(q):
+            if row in self.row_ids():
+                yield row
 
 
 class SampledSQLRelationalDatabase(SQLRelationalDatabase):
@@ -383,7 +525,7 @@ class SampledSQLRelationalDatabase(SQLRelationalDatabase):
         if not use_ext:
             yield from set(self.__parent.query(query)).intersection(self._table_row_ids[query.table])
 
-    def selectivity(self,  query: RelationalQuery) -> int:
+    def selectivity(self, query: RelationalQuery) -> int:
         if self.has_extension(SelectivityExtension):
             if query in self.get_extension(SelectivityExtension).get_identity_cache().keys():
                 return self.get_extension(SelectivityExtension).selectivity(query)
