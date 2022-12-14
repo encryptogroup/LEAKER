@@ -133,7 +133,7 @@ class RelationalDatabase(Dataset):
     @abstractmethod
     def restrict_keyword_size(self, max_keywords: int = 0,
                               selectivity: Selectivity = Selectivity.Independent,
-                              tables: Optional[Iterable[Union[str, int]]] = None) -> 'Dataset':
+                              tables: Optional[Iterable[Union[str, int]]] = None) -> 'RelationalDatabase':
         """
         Restricts this data set to the given amount of keywords. Contrary to sampling, the restriction method returns a
         full data set that acts accordingly, i.e., that is not yet sampled. This method is used to restrict big data
@@ -151,7 +151,7 @@ class RelationalDatabase(Dataset):
         raise NotImplementedError
 
     @abstractmethod
-    def restrict_rate(self, rate: float, tables: Optional[Iterable[Union[str, int]]] = None) -> 'Dataset':
+    def restrict_rate(self, rate: float, tables: Optional[Iterable[Union[str, int]]] = None) -> 'RelationalDatabase':
         """
         Restricts this data set to the given percentage. The rate must be in [0, 1]. Other values must be rejected by
         this method. Contrary to sampling, the restriction method returns a full data set that acts accordingly, i.e.,
