@@ -18,6 +18,7 @@ from .dummy import RangeBaselineAttack, RangeCountBaselineAttack
 from .gjw import GJWbasic, GJWspurious, GJWmissing, GJWpartial
 from .sap import Sap
 from .scoring import ScoringAttack, RefinedScoringAttack
+from .ihop import Ihop
 
 __all__ = [
     'FullQuerySpace', 'PartialQuerySpace', 'FullQueryLogSpace', 'PartialQueryLogSpace', 'FullUserQueryLogSpace',
@@ -53,7 +54,9 @@ __all__ = [
 
     'GJWbasic', 'GJWspurious',  'GJWmissing', 'GJWpartial',  # gjw.py
 
-    'Sap', #sap.py
+    'Sap', # sap.py
     
     'ScoringAttack', 'RefinedScoringAttack',  # scoring.py
+
+    'Ihop', # ihop.py
 ]

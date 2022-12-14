@@ -12,7 +12,7 @@ from typing import List, Iterable, Tuple
 
 from leaker.api import InputDocument, Dataset, DummyKeywordQueryLogFromTrends, Selectivity, RandomRangeDatabase, RangeAttack, LeakagePattern, \
     RangeDatabase
-from leaker.attack import Countv2, Sap, PartialQuerySpace, PartialQueryLogSpace, GeneralizedKKNO, UniformRangeQuerySpace
+from leaker.attack import Countv2, Sap, PartialQuerySpace, PartialQueryLogSpace, GeneralizedKKNO, UniformRangeQuerySpace, Ihop
 from leaker.attack.query_space import AuxiliaryKnowledgeQuerySpace
 from leaker.evaluation import KnownDatasetSampler, SampledDatasetSampler, EvaluationCase, QuerySelector, KeywordAttackEvaluator, MAError, \
     RangeAttackEvaluator
@@ -100,11 +100,13 @@ ubuntu_db: Dataset = backend_u.load_dataset("ubuntu_data")
 # preprocessor.run()
 
 backend = WhooshBackend()
-enron_db: Dataset = backend.load_dataset("enron_sent")
+enron_db: Dataset = backend.load_dataset("enron_sent","ihop2")
 
 # log.info(f"Loaded {enron_db.name()} data. {len(enron_db)} documents with {len(enron_db.keywords())} words.")
-#enron_db_restricted = enron_db.restrict_keyword_size(500,Selectivity.High)
+enron_db_restricted = enron_db.restrict_keyword_size(1000,Selectivity.High)
 
+debian_db = debian_db.restrict_keyword_size(1000,Selectivity.High)
+ubuntu_db = ubuntu_db.restrict_keyword_size(1000,Selectivity.High)
 # enron_kw = list(enron_db.keywords())
 # enron_sorted = sorted(enron_kw,key=lambda kw: enron_db.selectivity(kw), reverse=True)
 # enron_sorted = [(kw,enron_db.selectivity(kw)) for kw in enron_sorted]
@@ -285,9 +287,9 @@ enron_db: Dataset = backend.load_dataset("enron_sent")
 
 #tair_db = backend_d.load_dataset("tair_gd")
 
-stat = StatisticalCloseness(co_sim=True, out_file='stat_close_demo.png', print_output=True)
-metric = stat.compute_metric([(ubuntu_db, enron_db),(ubuntu_db, debian_db),(enron_db, [.5,.1,.01])])
-print(metric)
+# stat = StatisticalCloseness(co_sim=True, out_file='stat_close_demo.png', print_output=True)
+# metric = stat.compute_metric([(ubuntu_db, enron_db),(ubuntu_db, debian_db),(enron_db, [.5,.1,.01])])
+# print(metric)
 
 data: dict = None
 with open("/home/user/Documents/LEAKER/LEAKER/data_sources/Google_Trends/aux_knowledge.pkl",'rb') as f:
@@ -297,29 +299,33 @@ keyword_trends: dict = None
 with open("/home/user/Documents/LEAKER/enron_db.pkl",'rb') as f:
     _, keyword_trends = pkl.load(f)
 
+
 #query_log = DummyKeywordQueryLogFromList("queries_cli", data['queries'])
-query_log = DummyKeywordQueryLogFromTrends("trends_querylog", keyword_trends,100,(210,260),5,5,Selectivity.Independent)
+query_log = DummyKeywordQueryLogFromTrends("trends_querylog", keyword_trends,100,(210,260),5,1000,Selectivity.High)
 query_space = AuxiliaryKnowledgeQuerySpace#PartialQueryLogSpace
 
 # We can evaluate according to many criteria:
 #print(data['frequencies'].shape)
 #attacks = [Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=0),Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=0.25),Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=0.5),Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=0.75),Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=1)]  # the attacks to evaluate
-attacks = [Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=0.5)]
+#attacks = [Sap.definition(known_frequencies=query_log.frequencies(), chosen_keywords=query_log.chosen_keywords(),alpha=0.5)]
+attacks = [Ihop.definition(known_frequencies=query_log.frequencies(),chosen_keywords=query_log.chosen_keywords(),alpha=0.5)]
 runs = 5  # Amount of evaluations
 
 # From this, we can construct a simple EvaluationCase:
-evaluation_case = EvaluationCase(attacks=attacks, dataset=enron_db,runs=runs)#enron_db_restricted, runs=runs)
+#evaluation_case = EvaluationCase(attacks=attacks, dataset=debian_db, runs=runs)#enron_db_restricted, runs=runs)
+evaluation_case = EvaluationCase(attacks=attacks, dataset=enron_db_restricted, runs=runs)
 
-kdr = [.5,.25,.1,.05,.03,.01,.0075]  # known data rates
+
+kdr = [.5]  # known data rates
 reuse = False  # If we reuse sampled datasets a number of times (=> we will have a 5x5 evaluation here)
 # From this, we can construct a DatasetSampler:
-#dataset_sampler = SampledDatasetSampler(training_set=ubuntu_db)
-dataset_sampler = SampledDatasetSampler(kdr_samples=kdr, reuse=reuse)
+dataset_sampler = SampledDatasetSampler(training_set=ubuntu_db)
+#dataset_sampler = SampledDatasetSampler(kdr_samples=kdr, reuse=reuse)
 # The query space to populate. Here, we use partial sampling from
 # the data collection. With a query log, a QueryLogSpace is used.
 sel = Selectivity.High  # When sampling queries, we use high selectivity keywords
 qsp_size = 500  # Size of the query space
-sample_size = 100  # Amount of queries attacked at a time (sampled from the query space)
+sample_size = 10000  # Amount of queries attacked at a time (sampled from the query space)
 allow_repetition = True  # If queries can repeat
 # From this, we can construct a QuerySelector:
 query_selector = QuerySelector(query_space=query_space, selectivity=sel, query_space_size=qsp_size, queries=sample_size,
@@ -330,7 +336,7 @@ out_file = "sap_sampled4.png"  # Output file (if desired), will be stored in dat
 # With these parameters, we can set up the Evaluator:
 eva = KeywordAttackEvaluator(evaluation_case=evaluation_case, dataset_sampler=dataset_sampler,
                              query_selector=query_selector,
-                             sinks=SampledMatPlotLibSink(out_file=out_file, metric=metric), parallelism=8)
+                             sinks=SampledMatPlotLibSink(out_file=out_file), parallelism=8)
 
 # And then run it:
 eva.run()

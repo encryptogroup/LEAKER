@@ -57,8 +57,7 @@ def compute_frequencies(ql:KeywordQueryLog):
 
 class Sap(KeywordAttack):
     """
-    Implements the SAP attack from Oya & Kerschbaum (the part using volume information).
-    It uses the TotalVolume and ResponseLength patterns.
+    Implements the SAP attack from Oya & Kerschbaum.
     """
     _known_volume: Dict[str, int]
     _known_response_length: Dict[str, int]
@@ -114,7 +113,7 @@ class Sap(KeywordAttack):
 
     @classmethod
     def required_leakage(cls) -> List[LeakagePattern[Any]]:
-        return [TotalVolume(), ResponseLength(), Frequency()]
+        return [ResponseLength(), Frequency()]
 
     @classmethod
     def required_extensions(cls) -> Set[Type[E]]:
