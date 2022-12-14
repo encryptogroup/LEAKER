@@ -52,7 +52,14 @@ class SQLRelationalDatabase(RelationalDatabase):
         super(SQLRelationalDatabase, self).__init__()
         self._is_sampled_or_restricted = is_sampled_or_restricted
         self.__name = name
-        self.__backend_name = f"{MYSQL_IDENTIFIER}_{name}"
+
+        if '|' in name:
+            # workaround to prevent usage of non-existing database (in case of restricted dataset)
+            self.__backend_name = f"{MYSQL_IDENTIFIER}_{name.split('|', 1)[0]}"
+        elif '%' in name:
+            self.__backend_name = f"{MYSQL_IDENTIFIER}_{name.split('%', 1)[0]}"
+        else:
+            self.__backend_name = f"{MYSQL_IDENTIFIER}_{name}"
 
         self._sql_connection = SQLConnection()
         self._queries = dict()
@@ -221,11 +228,6 @@ class SQLRelationalDatabase(RelationalDatabase):
                 else:
                     ignored_tables.add(t)
 
-        for table_id in self._tables:
-            if table_id not in ignored_tables:
-                if max_keywords >= len(self.queries(table=table_id)):
-                    raise ValueError("Max keywords must be < than the available queries")
-
         return RestrictedSQLRelationalDatabase(self, max_keywords=max_keywords, selectivity=selectivity,
                                                ignored_tables=ignored_tables)
 
@@ -313,8 +315,8 @@ class RestrictedSQLRelationalDatabase(SQLRelationalDatabase):
     parent: SQLRelationalDatabase
         the full data set
     max_keywords: int
-        If not 0, restrict the keyword space of the tables to max_keywords keywords using random shuffling of the set
-        of keywords (if random_shuffling) or most common max_keywords. Each table is restricted independently.
+        If not 0, restrict the keyword space over all tables to max_keywords keywords using random shuffling of the set
+        of keywords (if random_shuffling) or most common max_keywords.
     selectivity: Selectivity
         If max_keywords is not 0, this determines the selectivity by which the keywords are chosen
     restriction_rate : float
@@ -333,12 +335,9 @@ class RestrictedSQLRelationalDatabase(SQLRelationalDatabase):
         if max_keywords != 0 and restriction_rate != 1.0:
             raise ValueError("Cannot restrict a SQLRelationalDatabase to both max keywords and a rate!")
 
-        self._samples = []
-        self._restricted = []
-
         self.__restriction_rate = restriction_rate
 
-        if max_keywords:
+        if max_keywords == 0:
             log.info(f'Restricting Dataset to {restriction_rate * 100}%')
             name = f'{parent.name()}%{restriction_rate}'
         else:
@@ -346,22 +345,40 @@ class RestrictedSQLRelationalDatabase(SQLRelationalDatabase):
             name = f'{parent.name()}|{max_keywords}'
         self.__parent = parent
 
-        for table_id in self._tables:
-            if table_id not in ignored_tables:
-                self._table_row_ids[table_id] = set(sample(parent._table_row_ids[table_id],
-                                                           ceil(self.__restriction_rate *
-                                                                len(parent._table_row_ids[table_id]))))
-        self._queries = dict()
-        for query_key, query_value in parent._queries.items():
-            if query_key in self._table_row_ids.values():
-                self._queries[query_key] = query_value
+        super(RestrictedSQLRelationalDatabase, self).__init__(name, True)
 
-        if max_keywords:
+        self._tables = parent._tables
+
+        if restriction_rate != 1:
+            for table_id in parent._tables:
+                if table_id not in ignored_tables:
+                    self._table_row_ids[table_id] = set(sample(parent._table_row_ids[table_id],
+                                                               ceil(self.__restriction_rate *
+                                                                    len(parent._table_row_ids[table_id]))))
+                else:
+                    self._table_row_ids[table_id] = parent._table_row_ids[table_id]
+
+            self._queries = dict()
+            for query_key, query_list in parent._queries.items():
+                for table_id in parent._tables:
+                    if query_key in self._table_row_ids.get(table_id):
+                        self._queries[query_key] = query_list
+        else:
+            self._queries = parent._queries
+            self._table_row_ids = parent._table_row_ids
+
+        if max_keywords != 0:
             all_queries: List[RelationalQuery] = list()
             for query_list in self._queries.values():
                 for query in query_list:
                     if query.table not in ignored_tables:
                         all_queries.append(query)
+
+            for table_id in self._tables:
+                if table_id not in ignored_tables:
+                    if max_keywords >= len(all_queries):
+                        raise ValueError("Max keywords must be < than all available queries")
+
             if selectivity == Selectivity.High:
                 queries_restricted = set([k for k, _ in Counter(all_queries).most_common(max_keywords)])
             elif selectivity == Selectivity.Low:
@@ -375,19 +392,23 @@ class RestrictedSQLRelationalDatabase(SQLRelationalDatabase):
                 queries_restricted = set(all_queries[:max_keywords])
 
             # We also have to restrict the queries and table_row_ids set *again* to only include the relevant queries
-            for (table_id, row_id), query_value in self._queries.items():
+            for (table_id, row_id), query_list in self._queries.items():
+                new_query_list = query_list.copy()
                 if table_id not in ignored_tables:
-                    if query_value not in queries_restricted:
-                        self._queries.pop((table_id, row_id))
-            for key, table_row_id in self._table_row_ids.items():
-                if table_row_id in self._queries:
-                    self._table_row_ids.pop(key)
+                    for query in query_list:
+                        if query not in queries_restricted:
+                            new_query_list.remove(query)
+                self._queries[(table_id, row_id)] = new_query_list
 
-        super(RestrictedSQLRelationalDatabase, self).__init__(name, True)
+            self._table_row_ids = {table_id: set() for table_id in parent._tables}
+            for table_id, row_id in self._queries:
+                key = (table_id, row_id)
+                if len(self._queries[key]) != 0:
+                    self._table_row_ids[table_id].add(key)
 
         self._set_extensions(map(lambda ext: ext.sample(self), parent._get_extensions()))
 
-        log.info(f"Restricting SQLRelational Index '{parent.name()}' complete")
+        log.info(f"Restricting SQLRelational Index '{name}' complete")
 
     def restriction_rate(self) -> float:
         return self.__restriction_rate
@@ -408,6 +429,16 @@ class RestrictedSQLRelationalDatabase(SQLRelationalDatabase):
         for row in self.__parent.query(q):
             if row in self.row_ids():
                 yield row
+
+    def queries(self, max_queries: Optional[int] = None, table: Optional[int] = None, attr: Optional[int] = None,
+                sel: Optional[Selectivity] = None) -> List[RelationalQuery]:
+        """Yields all possible queries in this data instance (possibly restricted to max_queries queries, a table and
+        attribute or a selectivity. If attr is set, table needs to be set as well."""
+        if max_queries or table or attr or sel:
+            # TODO implement (maybe not necessary)
+            raise NotImplementedError
+
+        return list(set(q for queries in self._queries.values() for q in queries))
 
 
 class SampledSQLRelationalDatabase(SQLRelationalDatabase):
