@@ -3,16 +3,15 @@ import statistics
 import sys
 
 import numpy as np
-from typing import Tuple, List
+from typing import Tuple, List, Union
 
 import pandas
 import seaborn as sns
-import random
 import matplotlib.pyplot as plt
 
-from leaker.api import RelationalDatabase
+from leaker.api import RelationalDatabase, RelationalQuery
 from leaker.attack.relational_estimators.estimator import NaruRelationalEstimator, KDERelationalEstimator, \
-    SamplingRelationalEstimator
+    SamplingRelationalEstimator, RelationalEstimator
 from leaker.extension import IdentityExtension, CoOccurrenceExtension
 from leaker.sql_interface import SQLBackend
 
@@ -61,14 +60,17 @@ def ErrorMetric(est_card, card):
     return max(est_card / card, card / est_card)
 
 
-def evaluate_estimator(estimator, keywords: List[str], use_cooc=False, ignore_zero_one=False) -> \
-        Tuple[float, float, float, float]:
+def evaluate_estimator(estimator: RelationalEstimator, keywords: Union[List[RelationalQuery], List[Tuple[RelationalQuery, RelationalQuery]]],
+                       use_cooc=False, ignore_zero_one=False) -> Tuple[float, float, float, float]:
     """
+    Run list of (co-occ) queries on estimator and calculate statistic properties.
 
     Other Parameters
     ----------------
-    estimator
-    keywords
+    estimator : RelationalEstimator
+        actual estimator
+    keywords : Union[List[RelationalQuery], List[Tuple[RelationalQuery, RelationalQuery]]]
+        list or queries or list of query tuples (in case of cooc)
     use_cooc : bool
         calculate selectivity based on two keywords
     ignore_zero_one : bool
@@ -83,17 +85,14 @@ def evaluate_estimator(estimator, keywords: List[str], use_cooc=False, ignore_ze
             if not (ignore_zero_one and est_value == 0 and actual_value == 1):
                 current_error = ErrorMetric(est_value, actual_value)
                 error_value_list.append(current_error)
-            else:
-                print("IGNORE 0.1 CASE")
     else:
         _full_coocc = mimic_db.get_extension(CoOccurrenceExtension)
-        for i in range(0, len(keywords)):
-            for j in range(0, i + 1):
-                est_value = estimator.estimate(keywords[i], keywords[j])
-                actual_value = _full_coocc.co_occurrence(keywords[i], keywords[j])
-                if not (ignore_zero_one and est_value == 0 and actual_value == 1):
-                    current_error = ErrorMetric(est_value, actual_value)
-                    error_value_list.append(current_error)
+        for q1, q2 in keywords:
+            est_value = estimator.estimate(q1, q2)
+            actual_value = _full_coocc.co_occurrence(q1, q2)
+            if not (ignore_zero_one and est_value == 0 and actual_value == 1):
+                current_error = ErrorMetric(est_value, actual_value)
+                error_value_list.append(current_error)
 
     median = np.median(error_value_list)
     point95 = np.quantile(error_value_list, 0.95)
@@ -118,11 +117,21 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, use_cooc=False, ignore_zero_
             mimic_db.extend_with(IdentityExtension)
 
     results_list = []
-    for _ in range(0, nr_of_evals):
+    for i in range(0, nr_of_evals):
+        log.info('######################################')
+        log.info('RUNNING ITERATION: ' + str(i+1))
+        log.info('######################################')
         for known_data_rate in [i / 10 for i in range(2, 10, 2)]:
             mimic_db.open()
             sampled_db = mimic_db.sample(known_data_rate)
-            kw_sample = random.sample(mimic_db.keywords(), nr_of_queries)  # nr of queries for evaluation
+
+            if not use_cooc:
+                kw_sample = mimic_db.queries(max_queries=nr_of_queries)
+            else:
+                # sample two lists of random queries, then combine them to co-occurrence
+                kw_sample1 = mimic_db.queries(max_queries=nr_of_queries)
+                kw_sample2 = mimic_db.queries(max_queries=nr_of_queries)
+                kw_sample = list(zip(kw_sample1, kw_sample2))
 
             # SAMPLING
             sampling_est = SamplingRelationalEstimator(sample=sampled_db, full=mimic_db)
@@ -162,7 +171,7 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, use_cooc=False, ignore_zero_
     df = df.groupby(['method']).mean()
     df = df.sort_index()
     sns_plot = sns.heatmap(df, annot=True, cmap='RdYlGn_r', fmt=".1f")
-    plt.title('cooc=' + str(use_cooc) + ', nr_of_evals=' + str(nr_of_evals) + ', nr_of_queries=' + str(nr_of_queries) +
+    plt.title('dataset=' + str(mimic_db.name()) + ', cooc=' + str(use_cooc) + ', nr_of_evals=' + str(nr_of_evals) + ', nr_of_queries=' + str(nr_of_queries) +
               ', ignore_zero_one=' + str(ignore_zero_one))
     sns_plot.figure.savefig("estimators.png", bbox_inches='tight')
     mimic_db.close()

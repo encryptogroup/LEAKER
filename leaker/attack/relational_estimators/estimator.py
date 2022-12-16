@@ -42,7 +42,7 @@ class RelationalEstimator(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def estimate(self, kw: RelationalKeyword) -> float:
+    def estimate(self, kw: RelationalKeyword, kw2: Optional[RelationalKeyword] = None) -> float:
         """Uses the trained model to estimate the selectivity/relative cardinality of kw on the full dataset
         based on the sample provided at training time."""
         raise NotImplementedError
