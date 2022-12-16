@@ -434,13 +434,30 @@ class RestrictedSQLRelationalDatabase(SQLRelationalDatabase):
 
     def queries(self, max_queries: Optional[int] = None, table: Optional[int] = None, attr: Optional[int] = None,
                 sel: Optional[Selectivity] = None) -> List[RelationalQuery]:
-        """Yields all possible queries in this data instance (possibly restricted to max_queries queries, a table and
-        attribute or a selectivity. If attr is set, table needs to be set as well."""
-        if max_queries or table or attr or sel:
-            # TODO implement (maybe not necessary)
-            raise NotImplementedError
+        """Yields all possible queries in this data instance. Possibly restricted to max_queries queries, a table and
+        attribute or a selectivity (if not set, then queries are chosen at random).
+        If attr is set, table needs to be set as well."""
+        all_queries = list(set(q for queries in self._queries.values() for q in queries))
+        if attr and table is None:
+            raise ValueError("If attr is set, table needs to be set as well.")
+        elif attr and table:
+            all_queries = [query for query in all_queries if (query.table == table and query.attr == attr)]
+        elif table:
+            all_queries = [query for query in all_queries if query.table == table]
+        elif max_queries:
+            if sel == Selectivity.High:
+                all_queries = set([k for k, _ in Counter(all_queries).most_common(max_queries)])
+            elif sel == Selectivity.Low:
+                all_queries = set([k for k, _ in Counter(all_queries).most_common()[:-max_queries - 1:-1]])
+            elif sel == Selectivity.PseudoLow:
+                all_queries = set(sorted(filter(lambda key: 10 <= self.__parent.selectivity(key), all_queries),
+                                         key=self.__parent.selectivity)[:max_queries])
+            else:
+                all_queries = list(set(all_queries))
+                shuffle(all_queries)
+                all_queries = set(all_queries[:max_queries])
 
-        return list(set(q for queries in self._queries.values() for q in queries))
+        return all_queries
 
 
 class SampledSQLRelationalDatabase(SQLRelationalDatabase):
