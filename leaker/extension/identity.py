@@ -91,7 +91,8 @@ class IdentityExtension(Extension, ABC):
 
     def sample(self, dataset: Union[Dataset, RelationalDatabase]) -> 'IdentityExtension':
         if isinstance(dataset, RelationalDatabase):
-            return IdentityExtension(dataset)  # building a new extension is cheaper than sampling it.
+            return IdentityExtension(dataset, dataset.doc_ids(), dataset.keywords(), self._identity_cache)
+            #return IdentityExtension(dataset)  # building a new extension is cheaper than sampling it.
         else:
             return IdentityExtension(dataset, dataset.doc_ids(), dataset.keywords(), self._identity_cache)
 
