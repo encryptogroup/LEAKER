@@ -125,7 +125,7 @@ class SQLRelationalDatabase(RelationalDatabase):
     def queries(self, max_queries: Optional[int] = None, table: Optional[int] = None, attr: Optional[int] = None,
                 sel: Optional[Selectivity] = None) -> List[RelationalQuery]:
         """Yields all possible queries in this data instance (possibly restricted to max_queries queries, a table and
-        attribute or a selectivity. If attr is set, table needs to be set as well."""
+        attribute or a selectivity (if sel None or undefined, then Independent). If attr is set, table needs to be set as well."""
         no_restrictions = max_queries is None and table is None and attr is None and sel is None
         if len(self._queries) == 0:
             stmt = f"SELECT query_id, table_id, attr_id, val FROM queries"

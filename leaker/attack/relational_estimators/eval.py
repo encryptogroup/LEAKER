@@ -9,7 +9,7 @@ import pandas
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-from leaker.api import RelationalDatabase, RelationalQuery
+from leaker.api import RelationalDatabase, RelationalQuery, Selectivity
 from leaker.attack.relational_estimators.estimator import NaruRelationalEstimator, KDERelationalEstimator, \
     SamplingRelationalEstimator, RelationalEstimator
 from leaker.extension import IdentityExtension, CoOccurrenceExtension
@@ -77,27 +77,37 @@ def evaluate_estimator(estimator: RelationalEstimator, keywords: Union[List[Rela
         ignore cases where estimation is zero and true selectivity is one
     """
     error_value_list = []
+    error_value_list_zero_one_ignored = []
     if not use_cooc:
         _full_identity = mimic_db.get_extension(IdentityExtension)
         for q in keywords:
             est_value = estimator.estimate(q)
             actual_value = len(_full_identity.doc_ids(q))
-            if not (ignore_zero_one and est_value == 0 and actual_value == 1):
-                current_error = ErrorMetric(est_value, actual_value)
-                error_value_list.append(current_error)
+            current_error = ErrorMetric(est_value, actual_value)
+            error_value_list.append(current_error)
+            if ignore_zero_one and not (est_value == 0 and actual_value == 1):
+                error_value_list_zero_one_ignored.append(current_error)
     else:
         _full_coocc = mimic_db.get_extension(CoOccurrenceExtension)
         for q1, q2 in keywords:
             est_value = estimator.estimate(q1, q2)
             actual_value = _full_coocc.co_occurrence(q1, q2)
-            if not (ignore_zero_one and est_value == 0 and actual_value == 1):
-                current_error = ErrorMetric(est_value, actual_value)
-                error_value_list.append(current_error)
+            current_error = ErrorMetric(est_value, actual_value)
+            error_value_list.append(current_error)
+            if ignore_zero_one and not (est_value == 0 and actual_value == 1):
+                error_value_list_zero_one_ignored.append(current_error)
 
     median = np.median(error_value_list)
     point95 = np.quantile(error_value_list, 0.95)
     point99 = np.quantile(error_value_list, 0.99)
     maximum = np.max(error_value_list)
+
+    if ignore_zero_one:
+        median_ignored = np.median(error_value_list_zero_one_ignored)
+        point95_ignored = np.quantile(error_value_list_zero_one_ignored, 0.95)
+        point99_ignored = np.quantile(error_value_list_zero_one_ignored, 0.99)
+        maximum_ignored = np.max(error_value_list_zero_one_ignored)
+        return median, point95, point99, maximum, median_ignored, point95_ignored, point99_ignored, maximum_ignored
 
     '''
     log.info('MEDIAN: ' + str(median))
@@ -124,6 +134,9 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, use_cooc=False, ignore_zero_
         for known_data_rate in [i / 10 for i in range(2, 10, 2)]:
             mimic_db.open()
             sampled_db = mimic_db.sample(known_data_rate)
+
+            if len(mimic_db.queries()) < nr_of_queries:
+                raise ValueError('Dataset has fewer queries than should be evaluated')
 
             if not use_cooc:
                 kw_sample = mimic_db.queries(max_queries=nr_of_queries)
@@ -167,13 +180,31 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, use_cooc=False, ignore_zero_
             log.info('NARU')
             results_list.append(('NARU-' + str(known_data_rate),) + evaluate_estimator(naru_est, kw_sample, use_cooc, ignore_zero_one))
 
-    df = pandas.DataFrame(data=results_list, columns=['method', 'median', '.95', '.99', 'max'])
+    if ignore_zero_one:
+        df = pandas.DataFrame(data=[el[:5] for el in results_list], columns=['method', 'median', '.95', '.99', 'max'])
+        df_ignored = pandas.DataFrame(data=[(el[0],) + el[5:] for el in results_list], columns=['method', 'median', '.95', '.99', 'max'])
+    else:
+        df = pandas.DataFrame(data=results_list, columns=['method', 'median', '.95', '.99', 'max'])
+
     df = df.groupby(['method']).mean()
     df = df.sort_index()
     sns_plot = sns.heatmap(df, annot=True, cmap='RdYlGn_r', fmt=".1f")
-    plt.title('dataset=' + str(mimic_db.name()) + ', cooc=' + str(use_cooc) + ', nr_of_evals=' + str(nr_of_evals) + ', nr_of_queries=' + str(nr_of_queries) +
-              ', ignore_zero_one=' + str(ignore_zero_one))
+    plt.title('dataset=' + str(mimic_db.name()) + ', cooc=' + str(use_cooc) + ', nr_of_evals=' + str(
+        nr_of_evals) + ', nr_of_queries=' + str(nr_of_queries) +
+              ', ignore_zero_one=False')
     sns_plot.figure.savefig("estimators.png", bbox_inches='tight')
+    plt.figure()
+
+    if ignore_zero_one:
+        df_ignored = df_ignored.groupby(['method']).mean()
+        df_ignored = df_ignored.sort_index()
+        sns_plot_ignored = sns.heatmap(df_ignored, annot=True, cmap='RdYlGn_r', fmt=".1f")
+
+    if ignore_zero_one:
+        plt.title('dataset=' + str(mimic_db.name()) + ', cooc=' + str(use_cooc) + ', nr_of_evals=' + str(
+            nr_of_evals) + ', nr_of_queries=' + str(nr_of_queries) +
+                  ', ignore_zero_one=' + str(ignore_zero_one))
+        sns_plot_ignored.figure.savefig("estimators_zero_one.png", bbox_inches='tight')
     mimic_db.close()
 
 
