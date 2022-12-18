@@ -168,16 +168,16 @@ class SQLRelationalDatabase(RelationalDatabase):
                 queries = [query for query in queries if query.table == table]
             elif max_queries:
                 if sel == Selectivity.High:
-                    queries = set([k for k, _ in Counter(queries).most_common(max_queries)])
+                    queries = list(set([k for k, _ in Counter(queries).most_common(max_queries)]))
                 elif sel == Selectivity.Low:
-                    queries = set([k for k, _ in Counter(queries).most_common()[:-max_queries - 1:-1]])
+                    queries = list(set([k for k, _ in Counter(queries).most_common()[:-max_queries - 1:-1]]))
                 elif sel == Selectivity.PseudoLow:
-                    queries = set(sorted(filter(lambda key: 10 <= self.__parent.selectivity(key), queries),
-                                             key=self.__parent.selectivity)[:max_queries])
+                    queries = list(set(sorted(filter(lambda key: 10 <= self.__parent.selectivity(key), queries),
+                                             key=self.__parent.selectivity)[:max_queries]))
                 else:
                     queries = list(set(queries))
                     shuffle(queries)
-                    queries = set(queries[:max_queries])
+                    queries = list(set(queries[:max_queries]))
             return queries
         else:
             return list(set(q for queries in self._queries.values() for q in queries))
