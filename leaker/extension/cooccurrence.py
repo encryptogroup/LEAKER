@@ -139,7 +139,9 @@ class CoOccurrenceExtension(SelectivityExtension):
 
     def sample(self, dataset: Dataset) -> 'CoOccurrenceExtension':
         if isinstance(dataset, RelationalDatabase):
-            return CoOccurrenceExtension(dataset, original_doc_id_dict=self.__doc_id_dict)
+            #return CoOccurrenceExtension(dataset, original_doc_id_dict=self.__doc_id_dict)
+            return CoOccurrenceExtension(dataset, dataset.doc_ids(), dataset.keywords(), self._identity_cache,
+                                         self.__coocc_cache, original_doc_id_dict=self.__doc_id_dict)
         else:
             return CoOccurrenceExtension(dataset, dataset.doc_ids(), dataset.keywords(), self._identity_cache,
                                      self.__coocc_cache, original_doc_id_dict=self.__doc_id_dict)

@@ -119,12 +119,12 @@ def evaluate_estimator(estimator: RelationalEstimator, keywords: Union[List[Rela
 
 
 def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, use_cooc=False, ignore_zero_one=False):
+    if not mimic_db.has_extension(IdentityExtension):
+        mimic_db.extend_with(IdentityExtension)
+
     if use_cooc:
         if not mimic_db.has_extension(CoOccurrenceExtension):
             mimic_db.extend_with(CoOccurrenceExtension)
-    else:
-        if not mimic_db.has_extension(IdentityExtension):
-            mimic_db.extend_with(IdentityExtension)
 
     results_list = []
     for i in range(0, nr_of_evals):
@@ -135,16 +135,14 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, use_cooc=False, ignore_zero_
             mimic_db.open()
             sampled_db = mimic_db.sample(known_data_rate)
 
-            if len(mimic_db.queries()) < nr_of_queries:
-                raise ValueError('Dataset has fewer queries than should be evaluated')
-
             if not use_cooc:
                 kw_sample = mimic_db.queries(max_queries=nr_of_queries)
             else:
                 # sample two lists of random queries, then combine them to co-occurrence
-                kw_sample1 = mimic_db.queries(max_queries=nr_of_queries)
-                kw_sample2 = mimic_db.queries(max_queries=nr_of_queries)
-                kw_sample = list(zip(kw_sample1, kw_sample2))
+                kw_sample = []
+                for _ in range(0, nr_of_queries):
+                    queries = mimic_db.queries(max_queries=2, sel=Selectivity.Independent)
+                    kw_sample.append((queries[0], queries[1]))
 
             # SAMPLING
             sampling_est = SamplingRelationalEstimator(sample=sampled_db, full=mimic_db)
@@ -199,12 +197,11 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, use_cooc=False, ignore_zero_
         df_ignored = df_ignored.groupby(['method']).mean()
         df_ignored = df_ignored.sort_index()
         sns_plot_ignored = sns.heatmap(df_ignored, annot=True, cmap='RdYlGn_r', fmt=".1f")
-
-    if ignore_zero_one:
         plt.title('dataset=' + str(mimic_db.name()) + ', cooc=' + str(use_cooc) + ', nr_of_evals=' + str(
             nr_of_evals) + ', nr_of_queries=' + str(nr_of_queries) +
                   ', ignore_zero_one=' + str(ignore_zero_one))
         sns_plot_ignored.figure.savefig("estimators_zero_one.png", bbox_inches='tight')
+
     mimic_db.close()
 
 
