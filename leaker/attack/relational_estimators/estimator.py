@@ -152,7 +152,7 @@ class NaruRelationalEstimator(RelationalEstimator):
             #self.psample = len(self._dataset_sample.row_ids(table_id))
             estimator = ProgressiveSampling(model, table, self.__psample,
                                             device=torch.device(DEVICE),
-                                            #cardinality=full_table.cardinality,
+                                            cardinality=full_table.cardinality,
                                             shortcircuit=self.__column_masking)
             self._estimator[table_id] = estimator
 
