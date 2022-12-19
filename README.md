@@ -1,12 +1,12 @@
 ## LEAKER
 ### A framework for LEakage AttacK Evaluation on Real-world data
 
-###### This framework allows for an easy evaluation of leakage attacks against encrypted search. See our paper (to appear) for more details
+###### This framework allows for an easy evaluation of leakage attacks against encrypted search.
 
 ---
 
 #### Requirements
-The framework has been written in Python 3.8. To install all requirements, you can use the `requirments.txt` file:
+The framework has been written in Python 3.8. To install all requirements, you can use the `requirements.txt` file:
 
     pip install -r requirements.txt
     
@@ -28,6 +28,8 @@ To install LEAKER on your system, run:
 
     pip install -e .
 
+Generating the documentation will require pdoc.
+
 ---
 
 #### Structure
@@ -47,6 +49,8 @@ instructions given to the participants that evaluated attacks on their private G
 Refer to `examples.py` to see how to use LEAKER.
 First, you need to download/extract the raw data into a corresponding subdirectory of `data_sources`. Then, you can index
 this data source (necessary only once) and load it with LEAKER to perform evaluations. 
+
+To generate the documentation: enter `pdoc --html leaker` with LEAKER/ as the current working directory.
 
 ---
 
