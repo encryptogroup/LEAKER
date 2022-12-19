@@ -485,7 +485,7 @@ class SampledSQLRelationalDatabase(SQLRelationalDatabase):
 
         super(SampledSQLRelationalDatabase, self).__init__(parent.name(), is_sampled_or_restricted=True)
         row_ids = set(row_id for row_ids in table_row_ids.values() for row_id in row_ids)
-        self._queries = {row: queries for row, queries in self._queries.items() if row in row_ids}
+        self._queries = {row: queries for row, queries in parent._queries.items() if row in row_ids}
         self._table_row_ids = table_row_ids
 
         log.info(f"Sampling extensions for '{self.name()}'.")
