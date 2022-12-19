@@ -53,13 +53,13 @@ class SQLRelationalDatabase(RelationalDatabase):
         self._is_sampled_or_restricted = is_sampled_or_restricted
         self.__name = name
 
+        self.__backend_name = f"{MYSQL_IDENTIFIER}_{name}"
+
         if '|' in name:
             # workaround to prevent usage of non-existing database (in case of restricted dataset)
-            self.__backend_name = f"{MYSQL_IDENTIFIER}_{name.split('|', 1)[0]}"
-        elif '%' in name:
-            self.__backend_name = f"{MYSQL_IDENTIFIER}_{name.split('%', 1)[0]}"
-        else:
-            self.__backend_name = f"{MYSQL_IDENTIFIER}_{name}"
+            self.__backend_name = self.__backend_name.split('|', 1)[0]
+        if '%' in name:
+            self.__backend_name = self.__backend_name.split('%', 1)[0]
 
         self._sql_connection = SQLConnection()
         self._queries = dict()
