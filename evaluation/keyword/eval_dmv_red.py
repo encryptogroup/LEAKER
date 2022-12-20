@@ -8,8 +8,9 @@ import logging
 import sys
 
 from leaker.api import Dataset, Selectivity
-from leaker.attack import PartialQuerySpace, Countv2, RiondatoCount, AddRiondatoCount
+from leaker.attack import PartialQuerySpace, Countv2, NaruCount
 from leaker.attack.dummy import DummyRelationalAttack
+from leaker.attack.sap import Sap, RelationalSap, NaruRelationalSap
 from leaker.evaluation import DatasetSampler, EvaluationCase, QuerySelector, RelationalAttackEvaluator
 from leaker.extension import SelectivityExtension, IdentityExtension, CoOccurrenceExtension
 from leaker.plotting import KeywordMatPlotLibSink
@@ -33,30 +34,30 @@ log = logging.getLogger(__name__)
 
 backend = SQLBackend()
 log.info(f"has dbs {backend.data_sets()}")
-mimic_db: Dataset = backend.load("dmv_full")
-
+mimic_db: Dataset = backend.load("dmv_10k")
+mimic_db.extend_with(IdentityExtension)
+mimic_db = mimic_db
+mimic_db.open()
 #mimic_db.extend_with(CoOccurrenceExtension)
-
-
 
 log.info(f"Loaded {mimic_db.name()} data. {len(mimic_db)} documents with {len(mimic_db.keywords())} words. {mimic_db.has_extension(IdentityExtension)}")
 
-attacks = [Countv2, RiondatoCount, AddRiondatoCount]  # the attacks to evaluate
+attacks = [RelationalSap, NaruRelationalSap]  # the attacks to evaluate
 runs = 1  # Amount of evaluations
 
 # From this, we can construct a simple EvaluationCase:
 evaluation_case = EvaluationCase(attacks=attacks, dataset=mimic_db, runs=runs)
 
-kdr = [.8, 1]  # known data rates
+kdr = [.1, .2, .4, .6]  # known data rates
 reuse = True  # If we reuse sampled datasets a number of times (=> we will have a 5x5 evaluation here)
 # From this, we can construct a DatasetSampler:
 dataset_sampler = DatasetSampler(kdr_samples=kdr, reuse=reuse)
 
 query_space = PartialQuerySpace  # The query space to populate. Here, we use partial sampling from
 # the data collection. With a query log, a QueryLogSpace is used.
-sel = Selectivity.High  # When sampling queries, we use high selectivity keywords
+sel = Selectivity.Low  # When sampling queries, we use high selectivity keywords
 qsp_size = 500  # Size of the query space
-sample_size = 150  # Amount of queries attacked at a time (sampled from the query space)
+sample_size = 300  # Amount of queries attacked at a time (sampled from the query space)
 allow_repetition = False  # If queries can repeat
 # From this, we can construct a QuerySelector:
 query_selector = QuerySelector(query_space=query_space, selectivity=sel, query_space_size=qsp_size, queries=sample_size,
@@ -67,8 +68,9 @@ out_file = "dmv_test.png"  # Output file (if desired), will be stored in data/fi
 # With these parameters, we can set up the Evaluator:
 eva = RelationalAttackEvaluator(evaluation_case=evaluation_case, dataset_sampler=dataset_sampler,
                                 query_selector=query_selector,
-                                sinks=KeywordMatPlotLibSink(out_file=out_file), parallelism=8)
+                                sinks=KeywordMatPlotLibSink(out_file=out_file), parallelism=1)
 
 # And then run it:
 eva.run()
+mimic_db.close()
 
