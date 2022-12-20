@@ -5,9 +5,11 @@ from typing import Iterable, List, Any, Dict, Set, TypeVar, Type
 import numpy as np
 from scipy.optimize import linear_sum_assignment as hungarian
 
-from ..api import Extension, KeywordAttack, Dataset, LeakagePattern
-from ..extension import VolumeExtension
+from .relational_estimators.estimator import NaruRelationalEstimator
+from ..api import Extension, KeywordAttack, Dataset, LeakagePattern, RelationalDatabase, RelationalQuery
+from ..extension import VolumeExtension, SelectivityExtension, IdentityExtension
 from ..pattern import ResponseLength, TotalVolume
+from ..sql_interface.sql_database import SampledSQLRelationalDatabase, SQLRelationalDatabase
 
 log = getLogger(__name__)
 
@@ -36,6 +38,7 @@ def compute_log_binomial_probability_matrix(ntrials, probabilities, observations
     probabilities = np.array(probabilities)
     probabilities[probabilities == 0] = min(probabilities[
                                                 probabilities > 0]) / 100  # To avoid numerical errors. An error would mean the adversary information is very off.
+    probabilities[probabilities == 1.0] = 0.9999  # prevent log(0)
     log_binom_term = np.array([_log_binomial(ntrials, obs / ntrials) for obs in observations])  # ROW TERM
     column_term = np.array([np.log(probabilities) - np.log(1 - np.array(probabilities))]).T  # COLUMN TERM
     last_term = np.array([ntrials * np.log(1 - np.array(probabilities))]).T  # COLUMN TERM
@@ -115,6 +118,137 @@ class Sap(KeywordAttack):
                                           tvols=[l[0] for l in leakage])  # * tv.dataset_volume() / dtv.dataset_volume()
         rlen_cost = self._build_cost_rlen(len(dataset.doc_ids()), rlens=[l[1] for l in leakage])
         total_cost = 0.5 * tvol_cost + 0.5 * rlen_cost
+
+        row_ind, col_ind = hungarian(total_cost)
+
+        res = ["" for _ in range(len(leakage))]
+
+        for i, j in zip(col_ind, row_ind):
+            res[i] = self._known_keywords[j]
+
+        return res
+
+
+class RelationalSap(KeywordAttack):
+    """
+    Implements the SAP attack from Oya & Kerschbaum for relational data using only ResponseLength patterns (no volume patterns).
+    """
+    _known_response_length: Dict[str, int]
+    _known_keywords: Dict
+    _delta: float
+
+    def __init__(self, known: SQLRelationalDatabase):
+        super(RelationalSap, self).__init__(known)
+
+        if not known.has_extension(IdentityExtension):
+            known.extend_with(IdentityExtension)
+        id_extension = known.get_extension(IdentityExtension)
+
+        self._delta = known.sample_rate()
+
+        self._known_response_length = dict()
+        self._known_keywords = dict()
+
+        i = 0
+        for keyword in known.keywords():
+            self._known_keywords[i] = keyword
+            self._known_keywords[keyword] = i
+            i += 1
+            self._known_response_length[keyword] = len(id_extension.doc_ids(keyword))
+
+    @classmethod
+    def name(cls) -> str:
+        return "Relational-SAP"
+
+    @classmethod
+    def required_leakage(cls) -> List[LeakagePattern[Any]]:
+        return [ResponseLength()]
+
+    @classmethod
+    def required_extensions(cls) -> Set[Type[E]]:
+        return {IdentityExtension}
+
+    def _build_cost_rlen(self, n: int, rlens: List[int]):
+
+        kw_probs_train = [self._known_response_length[self._known_keywords[i]] / len(self._known().doc_ids())
+                          for i in range(len(self._known().keywords()))]
+        log_prob_matrix = compute_log_binomial_probability_matrix(n, kw_probs_train, rlens)
+        cost_vol = - log_prob_matrix
+        return cost_vol
+
+    def recover(self, dataset: Dataset, queries: Iterable[RelationalQuery]) -> List[str]:
+        log.info(f"Running {self.name()} at {self._delta:.3f}")
+        queries = list(queries)
+        leakage = list(self.required_leakage()[0](dataset, queries))
+
+        rlen_cost = self._build_cost_rlen(len(dataset.doc_ids()), rlens=[l for l in leakage])
+        total_cost = rlen_cost
+
+        row_ind, col_ind = hungarian(total_cost)
+
+        res = ["" for _ in range(len(leakage))]
+
+        for i, j in zip(col_ind, row_ind):
+            res[i] = self._known_keywords[j]
+
+        return res
+
+
+class NaruRelationalSap(RelationalSap):
+    """
+    Implements the SAP attack from Oya & Kerschbaum for relational data using only ResponseLength patterns and the naru estimator
+    """
+    _known_response_length: Dict[str, int]
+    _known_keywords: Dict
+    _delta: float
+    __est: NaruRelationalEstimator
+
+    def __init__(self, known: SQLRelationalDatabase):
+        """
+        known : should be a SampledSQLRelationalDatabase object
+                otherwise known dataset is assumed to be the full dataset
+        """
+        if not isinstance(known, SampledSQLRelationalDatabase):
+            raise ValueError('Known dataset need to be of instance SampledSQLRelationalDatabase')
+
+        super().__init__(known)
+
+        if isinstance(known, SampledSQLRelationalDatabase):
+            full = known.parent()
+        else:
+            # dataset is not sampled, therefore whole dataset is known
+            full = known
+
+        self.__est = NaruRelationalEstimator(sample=known, full=full)
+
+        # overwrite known response length with estimation
+        log.debug('Start estimating known queries. This might take a while...')
+        i = 0
+        for keyword in known.keywords():
+            i=i+1
+            print(i)
+            self._known_response_length[keyword] = int(self.__est.estimate(keyword))
+        log.debug('Finished estimating known queries')
+
+    @classmethod
+    def name(cls) -> str:
+        return "Naru-SAP"
+
+    def _build_cost_rlen(self, n: int, rlens: List[int]):
+
+        kw_probs_train = [self._known_response_length[self._known_keywords[i]] / len(self._known().parent().doc_ids())
+                          for i in range(len(self._known().keywords()))]
+        log_prob_matrix = compute_log_binomial_probability_matrix(n, kw_probs_train, rlens)
+        cost_vol = - log_prob_matrix
+        return cost_vol
+
+    def recover(self, dataset: Dataset, queries: Iterable[RelationalQuery]) -> List[str]:
+        log.info(f"Running {self.name()} at {self._delta:.3f}")
+        queries = list(queries)
+        leakage = list(self.required_leakage()[0](dataset, queries))
+
+        rlen_cost = self._build_cost_rlen(len(dataset.doc_ids()), rlens=[l for l in leakage])
+        total_cost = rlen_cost
 
         row_ind, col_ind = hungarian(total_cost)
 
