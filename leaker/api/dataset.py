@@ -478,8 +478,9 @@ class DummyKeywordQueryLogFromTrends(KeywordQueryLog):
     __selectivity: Selectivity
     __n_queries_per_week: int
     __chosen_keywords: List[str] = None
+    __p: float
 
-    def __init__(self, name: str, keywords_trends: dict, n_kw: int, weeks: Tuple[int], offset:int=0, n_queries_per_week: int = 5, selectivity: Selectivity=Selectivity.High):
+    def __init__(self, name: str, keywords_trends: dict, n_kw: int, weeks: Tuple[int], offset:int=0, n_queries_per_week: int = 5, selectivity: Selectivity=Selectivity.High, p: float = 1.0):
         self.__name = name
         self.__keywords_list = list(keywords_trends.keys())
         self.__keywords_trends = keywords_trends
@@ -491,6 +492,7 @@ class DummyKeywordQueryLogFromTrends(KeywordQueryLog):
         assert n_kw <= len(self.__keywords_list), f"The number of keywords to choose has to be smaller than {len(self.__keywords_list)}."
         self.__n_kw = n_kw
         self.__frequencies = self._trend_matrix()
+        self.__p = p
         
         
         
@@ -523,8 +525,7 @@ class DummyKeywordQueryLogFromTrends(KeywordQueryLog):
     def _trend_matrix(self,chosen_keywords:list=None):
         if chosen_keywords is None:
             chosen_keywords = self._choose_keywords()
-            # chosen_keywords = list(self.__keywords_trends.keys())
-            # self.__chosen_keywords = chosen_keywords
+            self.__chosen_keywords = chosen_keywords
         trend_matrix = np.array([self.__keywords_trends[kw]['trend'] for kw in chosen_keywords])
         n_kw, n_weeks = trend_matrix.shape
         for i_col in range(n_weeks):
@@ -536,9 +537,13 @@ class DummyKeywordQueryLogFromTrends(KeywordQueryLog):
 
     def generate_queries(self):
         queries = []
-        if self.__chosen_keywords is None:
+        if self.__p < 1:
+            self.__n_kw = int(100/self.__p)
             chosen_keywords = self._choose_keywords()
-        else: chosen_keywords = self.__chosen_keywords
+        elif self.__chosen_keywords is None:
+            chosen_keywords = self._choose_keywords()
+        else:
+            chosen_keywords = self.__chosen_keywords
         for week in range(*self.__weeks):
             query_prob = self._trend_matrix(chosen_keywords)[:,week]
             queries += list(np.random.choice(chosen_keywords, self.__n_queries_per_week, p=query_prob))

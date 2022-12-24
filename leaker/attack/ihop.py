@@ -100,29 +100,41 @@ def get_Faux(freq,nkw):
         Faux = np.tile(((freq + epsilon / nkw) / (1 + 2 * epsilon / nkw)).reshape(nkw, 1), nkw)
     return Faux
 
-def get_Fexp_and_mapping(freq,nkw):
-    rep_to_kw = {rep: rep for rep in range(nkw)}
-    return get_Faux(freq,nkw), rep_to_kw
+def get_Fexp(freq,nkw):
+    return get_Faux(freq,nkw)
 
 def get_Vexp(dataset:Dataset, ids, chosen_keywords):
     ndocs = len(dataset)
     nkw = len(chosen_keywords)
-    binary_database_matrix = np.zeros((ndocs, nkw))
     keywords = dataset.keywords()
     doc_map = {}
     i = 0
     for doc in dataset.documents():
         doc_map[doc.id()] = i
         i += 1
+    binary_database_matrix = np.zeros((ndocs, nkw))
     for keyword in keywords:
         if keyword in chosen_keywords:
             resp = ids[keyword]
+            i_kw = chosen_keywords.index(keyword)
             for doc in resp:
-                i_kw = chosen_keywords.index(keyword)
-                binary_database_matrix[doc_map[doc], i_kw] = 1
+                try:
+                    binary_database_matrix[doc_map[doc], i_kw] = 1
+                except IndexError as e:
+                    log.warning(e)
     epsilon = 1e-20  # Value to control that there are no zero elements
     Vaux = (np.matmul(binary_database_matrix.T, binary_database_matrix) + epsilon) / (ndocs + 2 * epsilon)
     return Vaux
+
+def get_all_freqs(known:Dataset, chosen_keywords: List[str], frequencies: np.ndarray):
+    keywords = list(known.keywords())
+    nkw = len(keywords)
+    nweeks = frequencies.shape[1]
+    freqs = np.zeros((nkw,nweeks))
+    for i,kw in enumerate(keywords):
+        if kw in chosen_keywords:
+            freqs[i,:] = frequencies[chosen_keywords.index(kw),:]
+    return keywords, freqs
 
 class Ihop(KeywordAttack):
     """
@@ -140,7 +152,7 @@ class Ihop(KeywordAttack):
     _pct_free: float
     _known_ids: Dict[str,int]
 
-    def __init__(self, known: Dataset, known_frequencies: np.ndarray = None, chosen_keywords: List[str] = None, query_log: KeywordQueryLog = None, alpha:float = 0.0, niters:int=1000, pct_free:float=0.25):
+    def __init__(self, known: Dataset, known_frequencies: np.ndarray = None, chosen_keywords: List[str] = None, query_log: KeywordQueryLog = None, alpha:float = 0.0, niters:int=1000, pct_free:float=0.25, modify: bool = False):
         super(Ihop, self).__init__(known)
 
         self._delta = known.sample_rate()
@@ -162,6 +174,8 @@ class Ihop(KeywordAttack):
         
         if known_frequencies is not None:
             assert chosen_keywords is not None, log.error("Auxiliary frequency knowledge and correstponding keywords needed for IHOP frequency attack.")
+            if modify:
+                chosen_keywords,known_frequencies = get_all_freqs(known,chosen_keywords,known_frequencies)
             self._known_f_matrix = np.mean(known_frequencies,axis=1)
             self._chosen_keywords = chosen_keywords
         elif query_log is not None:
@@ -231,9 +245,8 @@ class Ihop(KeywordAttack):
             return cost_matrix
 
         nqr = len(token_trace)
+        rep_to_kw = rep_to_kw = {rep: rep for rep in range(self._nkw)}
 
-        Fexp, rep_to_kw = get_Fexp_and_mapping(self._known_f_matrix,self._nkw)    
-        
         if self._alpha == 0:
             Vobs = compute_Vobs(token_info, ndocs)
             Vexp = get_Vexp(self._known(),self._known_ids,self._chosen_keywords)
@@ -241,6 +254,7 @@ class Ihop(KeywordAttack):
         elif self._alpha == 1:  
             nq_per_tok, Fobs = compute_Fobs(token_trace, len(token_info))
             Fobs_counts = Fobs * nq_per_tok
+            Fexp = get_Fexp(self._known_f_matrix,self._nkw)   
             return _build_cost_Freq_some_fixed, rep_to_kw
         else:
             Vobs = compute_Vobs(token_info, ndocs)
@@ -291,7 +305,6 @@ class Ihop(KeywordAttack):
         ntok = len(token_info)
 
 
-
         unknown_toks = [i for i in range(ntok)]
         unknown_reps = [i for i in range(nrep)]
 
@@ -300,28 +313,40 @@ class Ihop(KeywordAttack):
         row_ind, col_ind = hungarian(c_matrix_original)
         replica_predictions_for_each_token = {}
         for j, i in zip(col_ind, row_ind):
-            replica_predictions_for_each_token[unknown_toks[j]] = unknown_reps[i]
+            try:
+                replica_predictions_for_each_token[unknown_toks[j]] = unknown_reps[i]
+            except KeyError:
+                pass
 
 
         # Iterate using co-occurrence:
         n_free = int(self._pct_free * len(unknown_toks))
-        assert n_free > 1
+        assert n_free > 1, log.error(f"n_free = {n_free} is too small.")
         for _ in range(self._niters):
             random_unknown_tokens = list(np.random.permutation(unknown_toks))
             free_tokens = random_unknown_tokens[:n_free]
             fixed_tokens = random_unknown_tokens[n_free:]
-            fixed_reps = [replica_predictions_for_each_token[token] for token in fixed_tokens]
-            free_replicas = [rep for rep in unknown_reps if rep not in fixed_reps]
+            try:
+                fixed_reps = [replica_predictions_for_each_token[token] for token in fixed_tokens]
+            
+                free_replicas = [rep for rep in unknown_reps if rep not in fixed_reps]
 
-            c_matrix = compute_coef_matrix(free_replicas, free_tokens, fixed_reps, fixed_tokens)
+                c_matrix = compute_coef_matrix(free_replicas, free_tokens, fixed_reps, fixed_tokens)
 
-            row_ind, col_ind = hungarian(c_matrix)
-            for j, i in zip(col_ind, row_ind):
-                replica_predictions_for_each_token[free_tokens[j]] = free_replicas[i]
-   
-        keyword_predictions_for_each_query = [rep_to_kw[replica_predictions_for_each_token[token]] for token in token_trace]
+                row_ind, col_ind = hungarian(c_matrix)
+                for j, i in zip(col_ind, row_ind):
+                    replica_predictions_for_each_token[free_tokens[j]] = free_replicas[i]
+            except KeyError:
+                pass
+
+        keyword_predictions_for_each_query = []
+        for token in token_trace:
+            try:
+                keyword_predictions_for_each_query.append(replica_predictions_for_each_token[token])
+            except KeyError:
+                pass
 
         pred = [self._chosen_keywords[kw_id] for kw_id in keyword_predictions_for_each_query]
-        accuracy = np.mean(np.array([1 if real == prediction else 0 for real, prediction in zip(queries, pred)]))
-        print("accuracy =",accuracy)
+        # accuracy = np.mean(np.array([1 if real == prediction else 0 for real, prediction in zip(queries, pred)]))
+        # print("IHOP_accuracy =",accuracy)
         return pred

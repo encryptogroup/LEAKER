@@ -214,11 +214,11 @@ class Sap(KeywordAttack):
         query_predictions_for_each_obs = []
         for weekly_tags in tag_traces:
             query_predictions_for_each_obs.append([query_predictions_for_each_tag[tag_id] for tag_id in weekly_tags])
-        weekly_queries = self._split_traces(queries,5)
         pred = [self._chosen_keywords[kw] for week_kw in query_predictions_for_each_obs for kw in week_kw]
 
-        flat_real = [kw for week_kws in weekly_queries for kw in week_kws]
-        accuracy = np.mean(np.array([1 if real == prediction else 0 for real, prediction in zip(flat_real, pred)]))
-        print("SAP alpha",self._alpha,"=",accuracy)
+        # weekly_queries = self._split_traces(queries,5)
+        # flat_real = [kw for week_kws in weekly_queries for kw in week_kws]
+        # accuracy = np.mean(np.array([1 if real == prediction else 0 for real, prediction in zip(flat_real, pred)]))
+        # print("SAP alpha",self._alpha,"=",accuracy)
 
         return pred
