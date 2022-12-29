@@ -1,5 +1,4 @@
-/data/whoosh/
-/data/pickle/
+/data/
 *.log
 *.png
 .DS_Store
@@ -16,3 +15,4 @@
 /leaker/pq-trees/build/
 /leaker/pq-trees/pq-trees/
 leaker.egg-info
+/data_sources/
