@@ -518,7 +518,7 @@ class DummyKeywordQueryLogFromTrends(KeywordQueryLog):
         elif self.__selectivity == Selectivity.Independent:
             chosen_keywords = random.sample(self.__keywords_trends.keys(),self.__n_kw)
         else:
-            print("Error: Unknown selectivity")
+            log.error(f"Unknown selectivity: {self.__selectivity}")
         self.__chosen_keywords = chosen_keywords
         return chosen_keywords
     

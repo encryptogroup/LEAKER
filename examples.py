@@ -319,8 +319,8 @@ evaluation_case = EvaluationCase(attacks=attacks, dataset=enron_db_restricted, r
 kdr = [.5]  # known data rates
 reuse = False  # If we reuse sampled datasets a number of times (=> we will have a 5x5 evaluation here)
 # From this, we can construct a DatasetSampler:
-dataset_sampler = SampledDatasetSampler(training_set=ubuntu_db)
-#dataset_sampler = SampledDatasetSampler(kdr_samples=kdr, reuse=reuse)
+#dataset_sampler = SampledDatasetSampler(training_set=ubuntu_db)
+dataset_sampler = SampledDatasetSampler(kdr_samples=kdr, reuse=reuse)
 # The query space to populate. Here, we use partial sampling from
 # the data collection. With a query log, a QueryLogSpace is used.
 sel = Selectivity.High  # When sampling queries, we use high selectivity keywords
