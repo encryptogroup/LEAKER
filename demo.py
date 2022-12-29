@@ -33,7 +33,7 @@ f = logging.Formatter(fmt='{asctime} {levelname:8.8} {process} --- [{threadName:
 console = logging.StreamHandler(sys.stdout)
 console.setFormatter(f)
 
-file = logging.FileHandler('examples.log', 'w', 'utf-8')
+file = logging.FileHandler('demo.log', 'w', 'utf-8')
 file.setFormatter(f)
 
 logging.basicConfig(handlers=[console, file], level=logging.INFO)
@@ -46,13 +46,17 @@ and settings are not covered (see the evaluations and tests for a more comprehen
 """
 
 ###### PRE-PROCESSING ######
-debian_list = DirectoryEnumerator("../Debian")
+# To use LEAKER, the data source you want to use needs to be pre-processed and indexed *once* for later use.
+# The Ubuntu, Debian and Google Trends data are included in this repository.
+# Download the Enron keyword dataset, available at https://www.cs.cmu.edu/~./enron/.
+# Extract it into the data_sources directory and select the folder to index:
+debian_list = DirectoryEnumerator("data_sources/Debian")
 debian_filter: Filter[RelativeFile, InputDocument] = FileLoader(DebianMailParser()) | FileToDocument()
 debian_sink: Sink[InputDocument] = WhooshWriter("debian_data")
 preprocessor = Preprocessor(debian_list, [debian_filter > debian_sink])
 preprocessor.run()
 
-ubuntu_list = DirectoryEnumerator("../Ubuntu")
+ubuntu_list = DirectoryEnumerator("data_sources/Ubuntu")
 ubuntu_filter: Filter[RelativeFile, InputDocument] = FileLoader(UbuntuMailParser()) | FileToDocument()
 ubuntu_sink: Sink[InputDocument] = WhooshWriter("ubuntu_data")
 preprocessor = Preprocessor(ubuntu_list, [ubuntu_filter > ubuntu_sink])
@@ -85,9 +89,9 @@ enron_db_restricted = enron_db.restrict_keyword_size(1000,Selectivity.High)
 ###### EVALUATION ######
 stat = StatisticalCloseness(out_file='stat-close_demo.png')
 metric = stat.compute_metric([(enron_db, [.5,.05,.005]),(ubuntu_db,debian_db)])
-print(metric)
+
 keyword_trends: dict = None
-with open("/home/user/Documents/LEAKER/enron_db.pkl",'rb') as f:
+with open("data_sources/Google_Trends/trends.pkl",'rb') as f:
     _, keyword_trends = pkl.load(f)
 
 query_log = DummyKeywordQueryLogFromTrends("trends_querylog", keyword_trends,100,(210,260),5,5,Selectivity.High)
