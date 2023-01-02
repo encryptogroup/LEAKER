@@ -84,12 +84,8 @@ class EvaluationCase:
             self.__datasets = [dataset.restrict_rate(rate) for rate in base_restriction_rates
                                for _ in range(base_restrictions_repetitions)]
         elif max_keywords != 0:
-            print("A")
-            print(len(dataset.queries()))
             self.__datasets = [dataset.restrict_keyword_size(max_keywords, selectivity)
                                for _ in range(base_restrictions_repetitions)]
-            print("B")
-            print(len(dataset.queries()))
         else:
             self.__datasets = [dataset]
 
