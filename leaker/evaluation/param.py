@@ -41,8 +41,8 @@ class EvaluationCase:
         default: None
     base_restrictions_repetitions: int
         how often an evaluation will be performed with fresh restricted base datasets
-        => EvaluationCase.runs() runs for base_restrictions_repetitions new restricted base data sets in
-        base_restriction_rates or max_keywords
+        => EvaluationCase.runs() runs for base_restrictions_repetitions new restriced base data sets in
+        base_restriction_rates
         default: 1
     max_keywords: int
         The keyword size to restrict the base dataset to (will only be performed if no restriction_rates are set)
@@ -84,12 +84,7 @@ class EvaluationCase:
             self.__datasets = [dataset.restrict_rate(rate) for rate in base_restriction_rates
                                for _ in range(base_restrictions_repetitions)]
         elif max_keywords != 0:
-            print("A")
-            print(len(dataset.queries()))
-            self.__datasets = [dataset.restrict_keyword_size(max_keywords, selectivity)
-                               for _ in range(base_restrictions_repetitions)]
-            print("B")
-            print(len(dataset.queries()))
+            self.__datasets = [dataset.restrict_keyword_size(max_keywords, selectivity)]
         else:
             self.__datasets = [dataset]
 

@@ -378,7 +378,7 @@ class RestrictedSQLRelationalDatabase(SQLRelationalDatabase):
         self.__parent = parent
 
         super(RestrictedSQLRelationalDatabase, self).__init__(name, True)
-        self._tables = parent._tables.copy()
+        self._tables = parent._tables
 
         if not self.__parent.is_open():
             self.__parent.open()
@@ -390,7 +390,7 @@ class RestrictedSQLRelationalDatabase(SQLRelationalDatabase):
                                                                ceil(self.__restriction_rate *
                                                                     len(parent._table_row_ids[table_id]))))
                 else:
-                    self._table_row_ids[table_id] = parent._table_row_ids[table_id].copy()
+                    self._table_row_ids[table_id] = parent._table_row_ids[table_id]
 
             self._queries = dict()
             for query_key, query_list in parent._queries.items():
@@ -398,8 +398,8 @@ class RestrictedSQLRelationalDatabase(SQLRelationalDatabase):
                     if query_key in self._table_row_ids.get(table_id):
                         self._queries[query_key] = query_list
         else:
-            self._queries = parent._queries.copy()
-            self._table_row_ids = parent._table_row_ids.copy()
+            self._queries = parent._queries
+            self._table_row_ids = parent._table_row_ids
 
         if max_keywords != 0:
             all_queries: List[RelationalQuery] = list()
