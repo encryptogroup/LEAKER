@@ -68,6 +68,8 @@ class SQLRelationalDatabase(RelationalDatabase):
         self._table_row_ids = dict()
 
         with self:
+            if not self.is_open():
+                self.open()
             self._tables = set(q.table for q in self.queries())
             for table_name in self.tables():
                 ret, res = self._sql_connection.execute_query(f"SELECT table_id FROM tables "
@@ -140,12 +142,17 @@ class SQLRelationalDatabase(RelationalDatabase):
                 elif sel == Selectivity.Low:
                     stmt += f" ORDER BY selectivity ASC"
                 elif sel == Selectivity.PseudoLow:
-                    lb = int(round(0.015 * len(self)))
-                    ub = int(round(0.02 * len(self)))
                     if table is not None:
-                        stmt += f" AND selectivity BETWEEN {lb} AND {ub}"
+                        stmt += f" AND selectivity >= 10"
                     else:
-                        stmt += f" WHERE selectivity BETWEEN {lb} AND {ub}"
+                        stmt += f" WHERE selectivity >= 10"
+                    stmt += f" ORDER BY selectivity ASC"
+                elif sel == Selectivity.PseudoLowTwo:
+                    if table is not None:
+                        stmt += f" AND selectivity >= 2"
+                    else:
+                        stmt += f" WHERE selectivity >= 2"
+                    stmt += f" ORDER BY selectivity ASC"
 
             if max_queries is not None:
                 stmt += f" LIMIT {max_queries}"
@@ -173,6 +180,9 @@ class SQLRelationalDatabase(RelationalDatabase):
                     queries = list(set([k for k, _ in Counter(queries).most_common()[:-max_queries - 1:-1]]))
                 elif sel == Selectivity.PseudoLow:
                     queries = list(set(sorted(filter(lambda key: 10 <= self.__parent.selectivity(key), queries),
+                                             key=self.__parent.selectivity)[:max_queries]))
+                elif sel == Selectivity.PseudoLowTwo:
+                    queries = list(set(sorted(filter(lambda key: 2 <= self.__parent.selectivity(key), queries),
                                              key=self.__parent.selectivity)[:max_queries]))
                 else:
                     queries = list(set(queries))
@@ -368,8 +378,10 @@ class RestrictedSQLRelationalDatabase(SQLRelationalDatabase):
         self.__parent = parent
 
         super(RestrictedSQLRelationalDatabase, self).__init__(name, True)
-
         self._tables = parent._tables
+
+        if not self.__parent.is_open():
+            self.__parent.open()
 
         if restriction_rate != 1:
             for table_id in parent._tables:
@@ -395,6 +407,7 @@ class RestrictedSQLRelationalDatabase(SQLRelationalDatabase):
                 for query in query_list:
                     if query.table not in ignored_tables:
                         all_queries.append(query)
+            all_queries = list(set(all_queries))  # remove duplicates
 
             for table_id in self._tables:
                 if table_id not in ignored_tables:
@@ -407,6 +420,9 @@ class RestrictedSQLRelationalDatabase(SQLRelationalDatabase):
                 queries_restricted = set([k for k, _ in Counter(all_queries).most_common()[:-max_keywords - 1:-1]])
             elif selectivity == Selectivity.PseudoLow:
                 queries_restricted = set(sorted(filter(lambda key: 10 <= self.__parent.selectivity(key), all_queries),
+                                                key=self.__parent.selectivity)[:max_keywords])
+            elif selectivity == Selectivity.PseudoLowTwo:
+                queries_restricted = set(sorted(filter(lambda key: 2 <= self.__parent.selectivity(key), all_queries),
                                                 key=self.__parent.selectivity)[:max_keywords])
             else:  # selectivity == Selectivity.Independent:
                 all_queries = list(set(all_queries))

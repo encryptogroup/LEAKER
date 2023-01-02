@@ -45,8 +45,11 @@ class Selectivity(Enum):
     High - the query space is populated with the highest selectivity keywords in the data set
     Low - the query space is populated with the lowest selectivity keywords in the data set
     PseudoLow - the query space is populated with the lowest selectivity keywords with a selectivity of at least 10
+    PseudoLowTwo - the query space is populated with the lowest selectivity keywords with a selectivity of at least 2
+                    (only for relational database)
     """
     Independent = -1
     High = 0
     Low = 1
     PseudoLow = 2
+    PseudoLowTwo = 3
