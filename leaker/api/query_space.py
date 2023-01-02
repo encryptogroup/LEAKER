@@ -86,11 +86,10 @@ class KeywordQuerySpace(QuerySpace):
             elif selectivity == Selectivity.Low:
                 self.__space.append(set(sorted(candidate_keywords, key=lambda item: full.selectivity(item[0]))[:size]))
             elif selectivity == Selectivity.PseudoLow:
-                if isinstance(full, RelationalDatabase):
-                    lb = int(round(0.015 * len(full)))
-                else:
-                    lb = 10
-                self.__space.append(set(sorted(filter(lambda item: lb <= full.selectivity(item[0]), candidate_keywords),
+                self.__space.append(set(sorted(filter(lambda item: 10 <= full.selectivity(item[0]), candidate_keywords),
+                                               key=lambda item: full.selectivity(item[0]))[:size]))
+            elif selectivity == Selectivity.PseudoLowTwo:
+                self.__space.append(set(sorted(filter(lambda item: 2 <= full.selectivity(item[0]), candidate_keywords),
                                                key=lambda item: full.selectivity(item[0]))[:size]))
             elif selectivity == Selectivity.Independent:
                 self.__space.append(set(sample(population=candidate_keywords, k=size)))
