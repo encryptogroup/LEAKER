@@ -1,11 +1,11 @@
 """Some Code in this file has been adapted from https://github.com/simon-oya/USENIX21-sap-code"""
 from logging import getLogger
-from typing import Iterable, List, Any, Dict, Set, TypeVar, Type
+from typing import Iterable, List, Any, Dict, Set, TypeVar, Type, Optional
 
 import numpy as np
 from scipy.optimize import linear_sum_assignment as hungarian
 
-from .relational_estimators.estimator import NaruRelationalEstimator
+from .relational_estimators.estimator import NaruRelationalEstimator, SamplingRelationalEstimator, RelationalEstimator
 from ..api import Extension, KeywordAttack, Dataset, LeakagePattern, RelationalDatabase, RelationalQuery
 from ..extension import VolumeExtension, SelectivityExtension, IdentityExtension
 from ..pattern import ResponseLength, TotalVolume
@@ -220,19 +220,28 @@ class NaruRelationalSap(RelationalSap):
             full = known
 
         self.__est = NaruRelationalEstimator(sample=known, full=full)
+        sampling_estimator = SamplingRelationalEstimator(known, full)
 
-        # overwrite known response length with estimation
         log.debug('Start estimating known queries. This might take a while...')
-        i = 0
-        for keyword in known.keywords():
-            i=i+1
-            print(i)
-            self._known_response_length[keyword] = int(self.__est.estimate(keyword))
+        self._known_response_length = self._perform_estimation(self.__est, sampling_estimator, known)
         log.debug('Finished estimating known queries')
 
     @classmethod
     def name(cls) -> str:
         return "Naru-SAP"
+
+    def _perform_estimation(self, estimator: RelationalEstimator,
+                            sampling_estimator: Optional[SamplingRelationalEstimator], known: SQLRelationalDatabase) \
+            -> Dict[str, int]:
+        # overwrite known response length with estimation
+        known_response_length: Dict[str, int] = dict()
+        i = 0
+        for keyword in known.keywords():
+            i = i + 1
+            print(i)
+            known_response_length[keyword] = int(estimator.estimate(keyword))
+
+        return known_response_length
 
     def _build_cost_rlen(self, n: int, rlens: List[int]):
 
@@ -258,3 +267,39 @@ class NaruRelationalSap(RelationalSap):
             res[i] = self._known_keywords[j]
 
         return res
+
+
+class NaruRelationalSapFast(NaruRelationalSap):
+    """
+    Adaption of NaruRelationalSap that uses basic sampling for queries with known rlen of 1 instead of naru estimation.
+    This can improve the setup runtime.
+    """
+
+    def __init__(self, known: SQLRelationalDatabase):
+        """
+        known : should be a SampledSQLRelationalDatabase object
+                otherwise known dataset is assumed to be the full dataset
+        """
+        super().__init__(known)
+
+    def _perform_estimation(self, naru_estimator: NaruRelationalEstimator,
+                            sampling_estimator: SamplingRelationalEstimator, known: SQLRelationalDatabase) \
+            -> Dict[str, int]:
+        """Perform estimation by sampling in case of known rlen is 1, otherwise use naru estimation"""
+        known_response_length: Dict[str, int] = dict()
+        i = 0
+        for keyword in known.keywords():
+            i = i + 1
+            print(i)
+            if self._known_response_length[keyword] != 1:
+                # if known rlen is not 1, use naru estimation
+                known_response_length[keyword] = int(naru_estimator.estimate(keyword))
+            else:
+                # if known rlen is not 1, use sampling
+                known_response_length[keyword] = int(sampling_estimator.estimate(keyword))
+
+        return known_response_length
+
+    @classmethod
+    def name(cls) -> str:
+        return "Naru-SAP-fast"
