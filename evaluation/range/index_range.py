@@ -74,10 +74,10 @@ sqlshare_sink: Sink[List] = RangeDatabaseWriter("[1123].[gill_done_2].percent_me
 preprocessor = Preprocessor(sqlshare, [sqlshare_filter > sqlshare_sink])
 preprocessor.run()
 
-sdss = DirectoryEnumerator(f"../../data_sources/sdss/photoobjall.dec")
+sdss = DirectoryEnumerator("../../data_sources/sdss/photoobjall.dec")
 sdss_filter: Filter[RelativeFile, QueryInputDocument] = FileLoader(
             RangeCsvParser(column=2, delimiter=',')) | FileToRangeInputDocument()
-sdss_sink: Sink[List] = RangeDatabaseWriter(f"sdss_photoobjall.dec", scale_factor=100)
+sdss_sink: Sink[List] = RangeDatabaseWriter("sdss_photoobjall.dec", scale_factor=100)
 
 preprocessor = Preprocessor(sdss, [sdss_filter > sdss_sink])
 preprocessor.run()
@@ -116,9 +116,8 @@ for code, meaning, scale in [('50900', 'cea', 1), ('51099', 'protein_creatine', 
 
     range_data = DirectoryEnumerator("../../data_sources/mimic/lab")
 
-    range_filter: Filter[RelativeFile, QueryInputDocument] = FileLoader(RangeCsvParser(column=5, delimiter=',',
-                                                                                       filters=[(3, code)])) | \
-                                                                     FileToRangeInputDocument()
+    range_filter: Filter[RelativeFile, QueryInputDocument] = FileLoader(
+        RangeCsvParser(column=5, delimiter=',', filters=[(3, code)])) | FileToRangeInputDocument()
     range_sink: Sink[List] = RangeDatabaseWriter(f"mimic_{meaning}", scale_factor=scale)
 
     preprocessor = Preprocessor(range_data, [range_filter > range_sink])

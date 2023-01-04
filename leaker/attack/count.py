@@ -8,12 +8,14 @@ import collections
 import math
 from itertools import starmap
 from logging import getLogger
-from typing import Iterable, List, Any, Dict, Set, Counter, Tuple, TypeVar, Type
+from typing import Iterable, List, Any, Dict, Set, Counter, Tuple, TypeVar, Type, Optional
 
 from ..api import KeywordAttack, Dataset, LeakagePattern, Extension, RelationalDatabase, RelationalQuery, \
     RelationalKeyword
-from ..extension import CoOccurrenceExtension
+from ..extension import CoOccurrenceExtension, PandasExtension
 from ..pattern import CoOccurrence
+from ..sql_interface import SQLRelationalDatabase
+from .relational_estimators.estimator import NaruRelationalEstimator
 
 log = getLogger(__name__)
 
@@ -30,7 +32,7 @@ class BasicCount(KeywordAttack):
     _known_unique_rlens: Dict[int, str]
 
     def __init__(self, known: Dataset):
-        log.info(f"Setting up Count attack for {known.name()}. This might take some time.")
+        log.info(f"Setting up {self.name()} attack for {known.name()}. This might take some time.")
         super(BasicCount, self).__init__(known)
 
         self._known_keywords = known.keywords()
@@ -179,45 +181,47 @@ class Countv2(BasicCount):
         return uncovered
 
 
-class RiondatoCount(Countv2):
+class EstimatorCount(Countv2):
     """
-    Implements the Count attack with confidence intervals of Riondato et al. It uses the CoOccurrence and the
+    Implements the Count attack with confidence intervals of different estimators. It uses the CoOccurrence and the
     ResponseLength patterns.
     """
 
-    _n: Dict[int, int]
+    _table_n: Dict[int, int]
     _additional_methods: bool
+    _query_candidates: List[Set[RelationalKeyword]]
 
     def __init__(self, known: RelationalDatabase):
-        super(RiondatoCount, self).__init__(known)
+        super(EstimatorCount, self).__init__(known)
         self._additional_methods = False
-        self._n = dict()
+        self._table_n = dict()
         for t, ids in known._table_row_ids.items():
-            self._n[t] = len(ids)
+            self._table_n[t] = len(ids)
+
+        self._query_candidates = []
 
     @classmethod
     def name(cls) -> str:
-        return "Riondato-Count"
+        return "Estimator-Count"
 
-    def _calculate_interval(self, c_ks: int, n: int, m: int = 1) -> Tuple[float, float]:
-        if m == 1:
-            d = 2
-        else:
-            d = 31
+    def _calculate_interval(self, x: RelationalKeyword, n: int, x2: Optional[RelationalKeyword] = None,
+                            m: int = 1) -> Tuple[float, float]:
+        return super()._calculate_interval(self._known_response_length(x))
 
-        epsilon = math.sqrt((d + math.log(5) + 2*math.log(2))/n) / math.sqrt(2)
+    def _calculate_candidates(self, queries: Iterable[RelationalQuery], rlens: List[float]) -> None:
+        for i, q in enumerate(queries):
+            self._query_candidates.append(set([w for w, (lbk, ubk) in
+                                               zip(self._known_keywords, starmap(self._calculate_interval,
+                                                                                 map(lambda x:
+                                                                                     (x, self._table_n[x.table]),
+                                                                                     self._known_keywords)))
+                                               if lbk <= rlens[i] <= ubk and w.table == q.table]))
 
-        lbk = c_ks / n - epsilon
-        ubk = c_ks / n + epsilon
-        return lbk, ubk
-
-    def __calculate_candidates(self, queries: Iterable[RelationalQuery], rlens: List[float]) \
-            -> List[Set[RelationalKeyword]]:
-        return [set([w for w, (lbk, ubk) in
-                     zip(self._known_keywords, starmap(self._calculate_interval,
-                                                       map(lambda x: (self._known_response_length(x), self._n[x.table]),
-                                                           self._known_keywords)))
-                     if lbk <= rlens[i] <= ubk and w.table == q.table]) for i, q in enumerate(queries)]
+    def _calculate_known_queries(self, queries: Iterable[RelationalQuery], rlens: List[int],
+                                 query_tables_length: List[int]) -> Dict[int, RelationalKeyword]:
+        self._calculate_candidates(queries, [rlens[i] / query_tables_length[i] for i in range(len(rlens))])
+        return {i: next(iter(self._query_candidates[i])) for i, _ in enumerate(queries)
+                if len(self._query_candidates[i]) == 1}
 
     def recover(self, dataset: Dataset, queries: Iterable[RelationalQuery]) -> List[str]:
         log.info(f"Running {self.name()} on {dataset.name()} for {self._delta:.3f}")
@@ -227,20 +231,18 @@ class RiondatoCount(Countv2):
         query_tables = [q.table for q in queries]  # we assume which table and their full length is leaked
         query_tables_length = [len(dataset._table_row_ids[t]) for t in query_tables]
 
-        query_candidates = self.__calculate_candidates(queries, [rlens[i] / query_tables_length[i]
-                                                                 for i in range(len(rlens))])
-        known_queries: Dict[int, RelationalKeyword] = {i: next(iter(query_candidates[i])) for i, _ in enumerate(queries)
-                                                       if len(query_candidates[i]) == 1}
+        known_queries = self._calculate_known_queries(queries, rlens, query_tables_length)
 
+        log.info(f"{self.name()}: Known queries {len(known_queries)}")
+        c = 0
         while True:
             unknown_queries = [i for i, _ in enumerate(queries) if i not in known_queries]
             old_size = len(known_queries)
             for i in unknown_queries:
-                candidate_keywords = [w for w in query_candidates[i] if w not in known_queries.values()]
+                candidate_keywords = [w for w in self._query_candidates[i] if w not in known_queries.values()]
                 for s in candidate_keywords[:]:
                     for j, k in known_queries.items():
-                        lbk, ubk = self._calculate_interval(self._known_coocc.co_occurrence(s, k),
-                                                            n=self._n[s.table], m=2)
+                        lbk, ubk = self._calculate_interval(s, n=self._table_n[s.table], x2=k, m=2)
                         if not (lbk <= coocc[i][j] / query_tables_length[i] <= ubk):
                             candidate_keywords.remove(s)
                             break
@@ -253,6 +255,9 @@ class RiondatoCount(Countv2):
 
                 if len(candidate_keywords) == 1:
                     known_queries[i] = candidate_keywords[0]
+            if self.name() == "Naru-Count":
+                log.info(f"Completed {c}")
+            c += 1
             if old_size >= len(known_queries):
                 break
 
@@ -270,12 +275,85 @@ class RiondatoCount(Countv2):
 
         return uncovered
 
-class AddRiondatoCount(RiondatoCount):
-    """Uses additional observations about relational databases"""
-    def __init__(self, known: RelationalDatabase):
-        super(AddRiondatoCount, self).__init__(known)
-        self._additional_methods = True
+
+class RiondatoCount(EstimatorCount):
 
     @classmethod
     def name(cls) -> str:
-        return "AddRiondato"
+        return "Riondato-Count"
+
+    def _calculate_interval(self, x: RelationalKeyword, n: int, x2: Optional[RelationalKeyword] = None,
+                            m: int = 1) -> Tuple[float, float]:
+        if m == 1:
+            c_ks = self._known_response_length(x)
+            d = 2
+        else:
+            c_ks = self._known_coocc.co_occurrence(x, x2)
+            d = 31
+
+        epsilon = math.sqrt(0.5*d + 0.0256466) / math.sqrt(n)
+
+        lbk = c_ks / n - epsilon
+        ubk = c_ks / n + epsilon
+        return lbk, ubk
+
+
+class NaruCount(EstimatorCount):
+    __est: NaruRelationalEstimator
+
+    def __init__(self, known: SQLRelationalDatabase):
+        super().__init__(known)
+        full = known.parent()
+        self.__est = NaruRelationalEstimator(sample=known, full=full)
+
+        self._table_n = dict()
+        for t, ids in full._table_row_ids.items():
+            self._table_n[t] = len(ids)
+
+    @classmethod
+    def name(cls) -> str:
+        return "Naru-Count"
+
+    def _calculate_naru_interval(self, x: RelationalKeyword, n: int, x2: Optional[RelationalKeyword] = None,
+                            m: int = 1) -> Tuple[float, float]:
+
+        epsilon = 0.005
+        c_ks = self.__est.estimate(x, x2)
+
+        lbk = c_ks / self._table_n[x.table] - epsilon
+        ubk = c_ks / self._table_n[x.table] + epsilon
+        return lbk, ubk
+
+    def _calculate_candidates(self, queries: Iterable[RelationalQuery], rlens: List[float]) -> None:
+        """We first get a rough candidate set with Hoeffding, then refine it with Naru to prevent too many calls
+        to the estimator"""
+        super()._calculate_candidates(queries, rlens)
+        for i, q in enumerate(queries):
+            orig = len(self._query_candidates[i])
+            contained = q in self._query_candidates[i]
+            log.info(f"Calculating candidates for {i} with {orig} original {contained}")
+            self._query_candidates[i] = set([w for w, (lbk, ubk) in
+                                             zip(self._known_keywords, starmap(self._calculate_naru_interval,
+                                                                               map(lambda x:
+                                                                                   (x, self._table_n[x.table]),
+                                                                                   self._known_keywords)))
+                                             if lbk <= rlens[i] <= ubk and w.table == q.table])
+            log.info(f"Calculated candidates for {i} with {orig} original_{contained} - "
+                     f"now {len(self._query_candidates[i])}_{q in self._query_candidates[i]}")
+
+    @classmethod
+    def required_extensions(cls) -> Set[Type[E]]:
+        return {PandasExtension}
+
+
+class AddEstimatorCount(KeywordAttack):
+    """Uses additional observations about relational databases"""
+    _attck: EstimatorCount
+
+    def __init__(self, known: RelationalDatabase, attck: Type[EstimatorCount]):
+        super().__init__(known)
+        self._attck = attck(known)
+        self._attck._additional_methods = True
+
+    def name(self) -> str:
+        return f"Add{self._attck.name()}"

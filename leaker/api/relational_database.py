@@ -94,6 +94,21 @@ class RelationalDatabase(Dataset):
         pass
 
     @abstractmethod
+    def tables(self) -> Iterator[str]:
+        """
+        :return: tables: names of the table in the database
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def table_id(self, table_name: str) -> int:
+        """
+        :param table_name: String of the table
+        :return: table_id: internal id of the table
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     def sample(self, rate: float, tables: Optional[Iterable[Union[str, int]]]) -> 'RelationalDatabase':
         """
         Samples this database to the given percentage. This method is used to sample base data sets to known data rates
@@ -113,6 +128,43 @@ class RelationalDatabase(Dataset):
     @abstractmethod
     def sample_rate(self) -> float:
         """The rate at which this data set was sampled, relative to the full data set"""
+        raise NotImplementedError
+
+    @abstractmethod
+    def restrict_keyword_size(self, max_keywords: int = 0,
+                              selectivity: Selectivity = Selectivity.Independent,
+                              tables: Optional[Iterable[Union[str, int]]] = None) -> 'RelationalDatabase':
+        """
+        Restricts this data set to the given amount of keywords. Contrary to sampling, the restriction method returns a
+        full data set that acts accordingly, i.e., that is not yet sampled. This method is used to restrict big data
+        sets to subsets used as basis for evaluations.
+
+        Parameters
+        ----------
+        max_keywords : int
+            the keyword set size to restrict to
+        selectivity: Selectivity
+            determines the selectivity by which the keywords are chosen
+        tables: Optional[Iterable[Union[str, int]]]
+            tables or their identifiers that should not be restricted
+         """
+        raise NotImplementedError
+
+    @abstractmethod
+    def restrict_rate(self, rate: float, tables: Optional[Iterable[Union[str, int]]] = None) -> 'RelationalDatabase':
+        """
+        Restricts this data set to the given percentage. The rate must be in [0, 1]. Other values must be rejected by
+        this method. Contrary to sampling, the restriction method returns a full data set that acts accordingly, i.e.,
+        that is not yet sampled. This method is used to restrict big data sets to representative subsets used as basis
+        for evaluations.
+
+        Parameters
+        ----------
+        rate : float
+            the restriction rate in [0, 1]
+        tables: Optional[Iterable[Union[str, int]]]
+            tables or their identifiers that should not be restricted
+        """
         raise NotImplementedError
 
     def __call__(self, query: RelationalQuery) -> Iterator[Tuple[int, int]]:

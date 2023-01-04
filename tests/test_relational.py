@@ -14,7 +14,7 @@ from leaker.api import Selectivity, QueryInputDocument, RelationalQuery
 from leaker.attack import PartialQuerySpace, Countv2
 from leaker.attack.dummy import DummyRelationalAttack
 from leaker.evaluation import EvaluationCase, RelationalAttackEvaluator, DatasetSampler, QuerySelector
-from leaker.extension import IdentityExtension, SelectivityExtension, CoOccurrenceExtension
+from leaker.extension import IdentityExtension, SelectivityExtension, CoOccurrenceExtension, PandasExtension
 from leaker.pattern import ResponseIdentity, ResponseLength, CoOccurrence
 from leaker.preprocessing import Preprocessor, Filter, Sink
 from leaker.preprocessing.data import DirectoryEnumerator, RelativeFile, FileLoader, RelationalCsvParser, \
@@ -78,6 +78,12 @@ def test_pattern_and_extension():
     with rdb:
         queries = rdb.queries(max_queries=100, sel=Selectivity.High)
         results = [set(rdb.query(q)) for q in queries]
+        rdb.extend_with(PandasExtension)
+        pde = rdb.get_extension(PandasExtension)
+        for q in queries:
+            df = pde.get_df(q.table)
+            assert set(df.index[df[f"attr_{q.attr}"] == q.value].tolist()) == set(x[1] for x in rdb.query(q))
+
         rlens = [len(r) for r in results]
         cooccs = [[len([i for i in rdb.query(q) if i in rdb.query(qp)]) for q in queries] for qp in queries]
 
@@ -102,12 +108,18 @@ def test_sampling():
     if not backend.has("random_csv"):
         test_indexing()
     rdb = backend.load("random_csv")
+    rdb.extend_with(PandasExtension)
     with rdb:
         with rdb.sample(.2, [0]) as rdb_sample:
+            pde = rdb_sample.get_extension(PandasExtension)
             assert rdb_sample.row_ids().issubset(rdb.row_ids())
             assert len(rdb_sample.row_ids()) < len(rdb.row_ids())
             queries = rdb_sample.queries(max_queries=100, sel=Selectivity.High)
+
             for i, q in enumerate(queries):
+                df = pde.get_df(q.table)
+                assert set(df.index[df[f"attr_{q.attr}"] == q.value].tolist()) == set(x[1] for x in rdb_sample.query(q))
+
                 assert set(rdb_sample.query(q)).issubset(rdb_sample.row_ids())
                 if q.table == 0:
                     assert set(rdb_sample.query(q)) == set(rdb.query(q))

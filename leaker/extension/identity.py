@@ -40,19 +40,21 @@ class IdentityExtension(Extension, ABC):
     """
 
     _identity_cache: Cache[Keyword, Set[Identifier]]
+    extension_name = 'Identity Cache'
 
     # noinspection PyMissingConstructor
     def __init__(self, dataset: Union[Dataset, RelationalDatabase], doc_ids: Optional[Set[Identifier]] = None,
                  keywords: Optional[Set[Keyword]] = None,
                  original_cache: Optional[Cache[Keyword, Set[Identifier]]] = None,
                  original_identity_extension: Any = None, pickle_filename: str = None):
+
         if pickle_filename is None or isinstance(dataset, RelationalDatabase):
             if original_identity_extension is None:
                 _doc_ids: Set[Identifier] = set() if doc_ids is None else doc_ids
                 _keywords: Set[Keyword] = set() if keywords is None else keywords
 
                 if original_cache is not None:
-                    log.debug(f"Subsampling Identity Cache for '{dataset.name()}'")
+                    log.debug(f"Subsampling {self.extension_name} for '{dataset.name()}'")
                     new_identity_cache: Dict[Keyword, Set[Identifier]] = dict()
                     for keyword, original_doc_ids in filter(lambda item: item[0] in _keywords, original_cache.items()):
                         new_identity_cache[keyword] = original_doc_ids.intersection(_doc_ids)
@@ -64,7 +66,7 @@ class IdentityExtension(Extension, ABC):
                                                      lambda kw: set(map(lambda doc: doc.id(), dataset(kw))))
                     log.debug(f"Subsampling for '{dataset.name()}' complete")
                 else:
-                    log.info(f"Creating Identity Cache for '{dataset.name()}'. This might take a while.")
+                    log.info(f"Creating {self.extension_name} for '{dataset.name()}'. This might take a while.")
                     if not dataset.is_open():
                         log.debug("Opening dataset for caching")
                         with dataset:
@@ -81,7 +83,7 @@ class IdentityExtension(Extension, ABC):
                         else:
                             self._identity_cache = Cache.build(lambda kw: set(map(lambda doc: doc.id(), dataset(kw))),
                                                                dataset.keywords())
-                    log.info(f"Identity Cache for '{dataset.name()}' complete")
+                    log.info(f"{self.extension_name} for '{dataset.name()}' complete")
             else:
                 self._identity_cache = deepcopy(original_identity_extension.get_identity_cache())
         else:
@@ -91,7 +93,8 @@ class IdentityExtension(Extension, ABC):
 
     def sample(self, dataset: Union[Dataset, RelationalDatabase]) -> 'IdentityExtension':
         if isinstance(dataset, RelationalDatabase):
-            return IdentityExtension(dataset)  # building a new extension is cheaper than sampling it.
+            return IdentityExtension(dataset, dataset.doc_ids(), dataset.keywords(), self._identity_cache)
+            #return IdentityExtension(dataset)  # building a new extension is cheaper than sampling it.
         else:
             return IdentityExtension(dataset, dataset.doc_ids(), dataset.keywords(), self._identity_cache)
 

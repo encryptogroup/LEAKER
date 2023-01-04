@@ -28,9 +28,9 @@ PYTHON_DIST_PACKAGES_DIRECTORY = "/usr/lib/python3/dist-packages/"
 
 MYSQL_IDENTIFIER = "leaker"  # used to identify MySQL databases used for leaker
 
-MYSQL_USER_NAME = "LEAKER_USER"
+MYSQL_USER_NAME = "leaker-user"
 
-MYSQL_USER_PASSWORD = ""   # TODO: Use environment variables
+MYSQL_USER_PASSWORD = "abcdefg"   # TODO: Use environment variables
 
 
 class AbortException(Exception):
@@ -45,8 +45,14 @@ class Selectivity(Enum):
     High - the query space is populated with the highest selectivity keywords in the data set
     Low - the query space is populated with the lowest selectivity keywords in the data set
     PseudoLow - the query space is populated with the lowest selectivity keywords with a selectivity of at least 10
+    PseudoLowTwo - the query space is populated with the lowest selectivity keywords with a selectivity of at least 2
+                    (only for relational database)
+    IndependentNotOne - the query space is populated uniformly at random from the keywords in the data set with selectivity >= 2 
+                    (only for relational database)
     """
     Independent = -1
     High = 0
     Low = 1
     PseudoLow = 2
+    PseudoLowTwo = 3
+    IndependentNotOne = 4
