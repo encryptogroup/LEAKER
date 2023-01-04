@@ -11,9 +11,11 @@ from typing import Iterable, List, Any, Dict, Set, TypeVar, Type
 import numpy as np
 
 from .count import Countv2
-from ..api import Dataset, LeakagePattern, Extension
+from .relational_estimators.estimator import NaruRelationalEstimator
+from ..api import Dataset, LeakagePattern, Extension, RelationalDatabase, RelationalQuery
 from ..extension import CoOccurrenceExtension
 from ..pattern import CoOccurrence
+from ..sql_interface import SQLRelationalDatabase
 
 log = getLogger(__name__)
 
@@ -80,6 +82,73 @@ class ScoringAttack(Countv2):
             for j in range(k):
                 coocc_s_kw[i][j] = self._known_coocc.co_occurrence(self._known_keywords[i],
                                                                    known_queries[known_queries_pos[j]])
+
+        for i, _ in enumerate(queries):
+            if i not in known_queries:
+                scores = coocc_s_kw - coocc_s_td[i].T
+                scores = -np.log(np.linalg.norm(scores, axis=1))
+                known_queries[i] = self._known_keywords[np.argmax(scores)]
+
+        uncovered = []
+        for i, _ in enumerate(queries):
+            if i in known_queries:
+                uncovered.append(known_queries[i])
+            else:
+                uncovered.append("")
+
+        log.info(f"Reconstruction completed.")
+
+        return uncovered
+
+
+class NaruScoringAttack(ScoringAttack):
+    """
+    Implements the Scoring attack from [DHP21]. Using naru co-occurrence estimates. If known_query_size == 0, they will be uncovered like in [CGPR15]
+    """
+
+    __est: NaruRelationalEstimator
+    __ignore_zero_selectivity = True  # don't estimate queries/query-tuples with known selectivity of zero
+
+    def __init__(self, known: SQLRelationalDatabase, known_query_size: float = 0.15):
+        self.__est = NaruRelationalEstimator(known, known.parent())
+        super(NaruScoringAttack, self).__init__(known, known_query_size)
+
+    @classmethod
+    def name(cls) -> str:
+        return "NaruScoring"
+
+    def _known_response_length(self, keyword: RelationalQuery) -> int:
+        known_cooc = self._known_coocc.selectivity(keyword)
+        if known_cooc > 0 or not self.__ignore_zero_selectivity:
+            return round(self.__est.estimate(keyword))
+        else:
+            return known_cooc
+
+    def recover(self, dataset: Dataset, queries: Iterable[str]) -> List[str]:
+        log.info(f"Running {self.name()}")
+        queries = list(queries)
+        coocc = self.required_leakage()[0](dataset, queries)
+
+        known_queries = self._get_known_queries(dataset, queries)
+
+        k = len(known_queries)
+        known_queries_pos = [i for i in known_queries.keys()]
+
+        coocc_s_td = np.zeros((len(queries), k))
+        for i in range(len(queries)):
+            for j in range(k):
+                coocc_s_td[i][j] = coocc[i][known_queries_pos[j]]
+
+        coocc_s_kw = np.zeros((len(self._known_keywords), k))
+        for i in range(len(self._known_keywords)):
+            for j in range(k):
+                known_cooc = self._known_coocc.co_occurrence(self._known_keywords[i],
+                                                                   known_queries[known_queries_pos[j]])
+                if known_cooc > 0 or not self.__ignore_zero_selectivity:
+                    coocc_s_kw[i][j] = self.__est.estimate(self._known_keywords[i],
+                                                                   known_queries[known_queries_pos[j]])
+                else:
+                    coocc_s_kw[i][j] = known_cooc
 
         for i, _ in enumerate(queries):
             if i not in known_queries:
