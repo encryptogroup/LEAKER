@@ -47,9 +47,12 @@ class Selectivity(Enum):
     PseudoLow - the query space is populated with the lowest selectivity keywords with a selectivity of at least 10
     PseudoLowTwo - the query space is populated with the lowest selectivity keywords with a selectivity of at least 2
                     (only for relational database)
+    IndependentNotOne - the query space is populated uniformly at random from the keywords in the data set with selectivity >= 2 
+                    (only for relational database)
     """
     Independent = -1
     High = 0
     Low = 1
     PseudoLow = 2
     PseudoLowTwo = 3
+    IndependentNotOne = 4

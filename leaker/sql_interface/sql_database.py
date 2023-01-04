@@ -153,6 +153,11 @@ class SQLRelationalDatabase(RelationalDatabase):
                     else:
                         stmt += f" WHERE selectivity >= 2"
                     stmt += f" ORDER BY selectivity ASC"
+                elif sel == Selectivity.IndependentNotOne:
+                    if table is not None:
+                        stmt += f" AND selectivity >= 2"
+                    else:
+                        stmt += f" WHERE selectivity >= 2"
 
             if max_queries is not None:
                 stmt += f" LIMIT {max_queries}"
@@ -184,6 +189,8 @@ class SQLRelationalDatabase(RelationalDatabase):
                 elif sel == Selectivity.PseudoLowTwo:
                     queries = list(set(sorted(filter(lambda key: 2 <= self.__parent.selectivity(key), queries),
                                              key=self.__parent.selectivity)[:max_queries]))
+                elif sel == Selectivity.IndependentNotOne:
+                    self.__space.append(set(sample(population=list(filter(lambda key: self.__parent.selectivity(key) >= 2, queries)), k=max_queries)))    
                 else:
                     queries = list(set(queries))
                     shuffle(queries)
@@ -424,6 +431,9 @@ class RestrictedSQLRelationalDatabase(SQLRelationalDatabase):
             elif selectivity == Selectivity.PseudoLowTwo:
                 queries_restricted = set(sorted(filter(lambda key: 2 <= self.__parent.selectivity(key), all_queries),
                                                 key=self.__parent.selectivity)[:max_keywords])
+            elif selectivity == Selectivity.IndependentNotOne:
+                self.__space.append(set(sample(population=list(filter(lambda key:
+                                        self.__parent.selectivity(key) >= 2, all_queries)), k=max_keywords)))
             else:  # selectivity == Selectivity.Independent:
                 all_queries = list(set(all_queries))
                 shuffle(all_queries)

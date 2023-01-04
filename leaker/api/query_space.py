@@ -93,6 +93,8 @@ class KeywordQuerySpace(QuerySpace):
                                                key=lambda item: full.selectivity(item[0]))[:size]))
             elif selectivity == Selectivity.Independent:
                 self.__space.append(set(sample(population=candidate_keywords, k=size)))
+            elif selectivity == Selectivity.IndependentNotOne:
+                self.__space.append(set(sample(population=list(filter(lambda item: full.selectivity(item[0]) >= 2, candidate_keywords)), k=size)))    
 
         self.__allow_repetition = allow_repetition
 
