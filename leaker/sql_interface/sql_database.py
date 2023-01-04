@@ -159,7 +159,8 @@ class SQLRelationalDatabase(RelationalDatabase):
                     else:
                         stmt += f" WHERE selectivity >= 2"
 
-            if max_queries is not None:
+            if max_queries is not None and sel != Selectivity.IndependentNotOne and sel != Selectivity.Independent:
+                # we don't limit in the case of independent selectivity, sampling will be done later
                 stmt += f" LIMIT {max_queries}"
 
             queries = []
@@ -168,6 +169,9 @@ class SQLRelationalDatabase(RelationalDatabase):
             if res is not None:
                 for query_id, table_id, attr_id, val in res:
                     queries.append(RelationalQuery(query_id, table_id, attr_id, val))
+            if (sel == Selectivity.IndependentNotOne or sel == Selectivity.Independent) and len(queries) > max_queries:
+                # sample queries independently
+                queries = list(sample(queries, max_queries))
             return queries
         elif not no_restrictions:
             '''Restrict based on stored queries list, not database'''
@@ -432,8 +436,8 @@ class RestrictedSQLRelationalDatabase(SQLRelationalDatabase):
                 queries_restricted = set(sorted(filter(lambda key: 2 <= self.__parent.selectivity(key), all_queries),
                                                 key=self.__parent.selectivity)[:max_keywords])
             elif selectivity == Selectivity.IndependentNotOne:
-                self.__space.append(set(sample(population=list(filter(lambda key:
-                                        self.__parent.selectivity(key) >= 2, all_queries)), k=max_keywords)))
+                queries_restricted = set(sample(population=list(filter(lambda key:
+                                        self.__parent.selectivity(key) >= 2, all_queries)), k=max_keywords))
             else:  # selectivity == Selectivity.Independent:
                 all_queries = list(set(all_queries))
                 shuffle(all_queries)
