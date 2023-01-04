@@ -235,10 +235,7 @@ class NaruRelationalSap(RelationalSap):
             -> Dict[str, int]:
         # overwrite known response length with estimation
         known_response_length: Dict[str, int] = dict()
-        i = 0
         for keyword in known.keywords():
-            i = i + 1
-            print(i)
             known_response_length[keyword] = int(estimator.estimate(keyword))
 
         return known_response_length
@@ -287,17 +284,13 @@ class NaruRelationalSapFast(NaruRelationalSap):
             -> Dict[str, int]:
         """Perform estimation by sampling in case of known rlen is 1, otherwise use naru estimation"""
         known_response_length: Dict[str, int] = dict()
-        i = 0
         for keyword in known.keywords():
-            i = i + 1
-            print(i)
             if self._known_response_length[keyword] != 1:
                 # if known rlen is not 1, use naru estimation
                 known_response_length[keyword] = int(naru_estimator.estimate(keyword))
             else:
-                # if known rlen is not 1, use sampling
+                # if known rlen is 1, use sampling
                 known_response_length[keyword] = int(sampling_estimator.estimate(keyword))
-
         return known_response_length
 
     @classmethod
