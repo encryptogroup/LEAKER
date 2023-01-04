@@ -1,6 +1,7 @@
 import logging
 import statistics
 import sys
+from random import sample
 
 import numpy as np
 from typing import Tuple, List, Union
@@ -16,7 +17,7 @@ from leaker.extension import IdentityExtension, CoOccurrenceExtension
 from leaker.sql_interface import SQLBackend
 
 # SPECIFY TO BE USED DATASET HERE
-dataset = 'dmv_full'
+dataset = 'dmv_10k'
 
 f = logging.Formatter(fmt='{asctime} {levelname:8.8} {process} --- [{threadName:12.12}] {name:32.32}: {message}',
                       style='{')
@@ -51,6 +52,7 @@ def evaluate_actual_rlen(keywords):
 
 
 def ErrorMetric(est_card, card):
+    est_card = round(est_card)  # especially KDE returns floats
     if card == 0 and est_card != 0:
         return est_card
     if card != 0 and est_card == 0:
@@ -118,7 +120,8 @@ def evaluate_estimator(estimator: RelationalEstimator, keywords: Union[List[Rela
     return median, point95, point99, maximum
 
 
-def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, use_cooc=False, ignore_zero_one=False):
+def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, sel=Selectivity.Independent, use_cooc=False, ignore_zero_one=False):
+    """ selectivity only for rlen, not for cooc (uses independent query tuples with known co-occ != 0 """
     if not mimic_db.has_extension(IdentityExtension):
         mimic_db.extend_with(IdentityExtension)
 
@@ -136,13 +139,21 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, use_cooc=False, ignore_zero_
             sampled_db = mimic_db.sample(known_data_rate)
 
             if not use_cooc:
-                kw_sample = mimic_db.queries(max_queries=nr_of_queries)
+                kw_sample = mimic_db.queries(max_queries=nr_of_queries, sel=sel)
             else:
-                # sample two lists of random queries, then combine them to co-occurrence
+                # only use tuples of queries with a known cooc-selectivity != 0
+                # (idea: cooc of 0 sampling is best, therefore we focus on the other ones)
                 kw_sample = []
-                for _ in range(0, nr_of_queries):
-                    queries = mimic_db.queries(max_queries=2, sel=Selectivity.Independent)
-                    kw_sample.append((queries[0], queries[1]))
+                all_sampled_queries = sampled_db.queries()
+                _sampled_coocc = sampled_db.get_extension(CoOccurrenceExtension)
+                for q1 in range(0, len(all_sampled_queries)):
+                    for q2 in range(i+1, len(all_sampled_queries)):
+                        if _sampled_coocc.co_occurrence(all_sampled_queries[q1], all_sampled_queries[q2]) > 0:
+                            kw_sample.append((all_sampled_queries[q1], all_sampled_queries[q2]))
+                if len(kw_sample) > nr_of_queries:
+                    kw_sample = list(sample(kw_sample, nr_of_queries))
+                else:
+                    log.info(f"Only {len(kw_sample)} suitable query tuples. No restriction of number of queries applied.")
 
             # SAMPLING
             sampling_est = SamplingRelationalEstimator(sample=sampled_db, full=mimic_db)
