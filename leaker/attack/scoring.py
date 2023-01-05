@@ -117,13 +117,6 @@ class NaruScoringAttack(ScoringAttack):
     def name(cls) -> str:
         return "NaruScoring"
 
-    def _known_response_length(self, keyword: RelationalQuery) -> int:
-        known_cooc = self._known_coocc.selectivity(keyword)
-        if known_cooc > 0 or not self.__ignore_zero_selectivity:
-            return round(self.__est.estimate(keyword))
-        else:
-            return known_cooc
-
     def recover(self, dataset: Dataset, queries: Iterable[str]) -> List[str]:
         log.info(f"Running {self.name()}")
         queries = list(queries)
