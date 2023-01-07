@@ -312,7 +312,6 @@ class NaruRefinedScoringAttack(RefinedScoringAttack):
             """%2 in Algo"""
             for i in unknown_queries:
                 scores = coocc_s_kw - coocc_s_td[i].T
-                print(scores)
                 scores = -np.log(np.linalg.norm(scores, axis=1))
                 max_indices = np.argpartition(scores, -2)[-2:]  # top 2 argmax but result is unsorted
                 cand_0 = max_indices[0] if scores[max_indices[0]] > scores[max_indices[1]] else max_indices[1]
