@@ -108,7 +108,7 @@ class NaruScoringAttack(ScoringAttack):
     """
 
     __est: NaruRelationalEstimator
-    __ignore_zero_selectivity = True  # don't estimate queries/query-tuples with known selectivity of zero
+    __estimation_lower_limit = 1  # do not estimate known query tuples with a co-occurrence below this value
 
     def __init__(self, known: SQLRelationalDatabase, known_query_size: float = 0.15):
         self.__est = NaruRelationalEstimator(known, known.parent())
@@ -120,7 +120,7 @@ class NaruScoringAttack(ScoringAttack):
 
     def __calculate_known_cooc(self, q1, q2) -> int:
         known_cooc = self._known_coocc.co_occurrence(q1, q2)
-        if known_cooc > 0 or not self.__ignore_zero_selectivity:
+        if known_cooc >= self.__estimation_lower_limit:
             return round(self.__est.estimate(q1, q2))
         else:
             return known_cooc
@@ -266,7 +266,7 @@ class NaruRefinedScoringAttack(RefinedScoringAttack):
     If known_query_size == 0, they will be uncovered like in [CGPR15]
     """
     __est: NaruRelationalEstimator
-    __ignore_zero_selectivity = True  # don't estimate queries/query-tuples with known selectivity of zero
+    __estimation_lower_limit = 1  # dont estimate known query tuples with a cooc below this value (to estimate all, set to 0)
 
     def __init__(self, known: SampledSQLRelationalDatabase, known_query_size: float = 0.15, ref_speed: int = 10):
         self.__est = NaruRelationalEstimator(known, known.parent())
@@ -279,7 +279,7 @@ class NaruRefinedScoringAttack(RefinedScoringAttack):
 
     def __calculate_known_cooc(self, q1, q2):
         known_cooc = self._known_coocc.co_occurrence(q1, q2)
-        if known_cooc > 0 or not self.__ignore_zero_selectivity:
+        if known_cooc >= self.__estimation_lower_limit:
             return self.__est.estimate(q1, q2)
         else:
             return known_cooc
