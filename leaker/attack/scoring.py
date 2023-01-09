@@ -11,7 +11,7 @@ from typing import Iterable, List, Any, Dict, Set, TypeVar, Type
 import numpy as np
 
 from .count import Countv2
-from .relational_estimators.estimator import NaruRelationalEstimator
+from .relational_estimators.estimator import NaruRelationalEstimator, SamplingRelationalEstimator
 from ..api import Dataset, LeakagePattern, Extension, RelationalDatabase, RelationalQuery
 from ..extension import CoOccurrenceExtension
 from ..pattern import CoOccurrence
@@ -108,10 +108,18 @@ class NaruScoringAttack(ScoringAttack):
     """
 
     __est: NaruRelationalEstimator
-    __estimation_lower_limit = 1  # do not estimate known query tuples with a co-occurrence below this value
+    __est_sampling: SamplingRelationalEstimator
+
+    ''' Set estimation lower limit absolute (e.g. 1 to skip sampling in 0 case) and upper limit relative (e.g. 0.5% as 
+    in naru paper). Upper absolute limit will then be calculated based on the number of docs in the full dataset. '''
+    __estimation_lower_limit = 1
+    __estimation_upper_limit_relative = 0.005
+    __estimation_upper_limit: int
 
     def __init__(self, known: SQLRelationalDatabase, known_query_size: float = 0.15):
         self.__est = NaruRelationalEstimator(known, known.parent())
+        self.__est_sampling = SamplingRelationalEstimator(known, known.parent())
+        self.__estimation_upper_limit = round(len(known.parent().queries()) * self.__estimation_upper_limit_relative)
         super(NaruScoringAttack, self).__init__(known, known_query_size)
 
     @classmethod
@@ -120,10 +128,11 @@ class NaruScoringAttack(ScoringAttack):
 
     def __calculate_known_cooc(self, q1, q2) -> int:
         known_cooc = self._known_coocc.co_occurrence(q1, q2)
-        if known_cooc >= self.__estimation_lower_limit:
+        if self.__estimation_lower_limit <= known_cooc <= self.__estimation_upper_limit:
             return round(self.__est.estimate(q1, q2))
         else:
-            return known_cooc
+            # use sampling
+            return round(self.__est_sampling.estimate(q1, q2))
 
     def recover(self, dataset: Dataset, queries: Iterable[str]) -> List[str]:
         log.info(f"Running {self.name()}")
