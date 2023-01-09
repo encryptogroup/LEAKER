@@ -1,7 +1,7 @@
 """
 For License information see the LICENSE file.
 
-Authors: Amos Treiber
+Authors: Amos Treiber, Patrick Ehrler
 
 """
 import logging
@@ -20,7 +20,7 @@ f = logging.Formatter(fmt='{asctime} {levelname:8.8} {process} --- [{threadName:
 console = logging.StreamHandler(sys.stdout)
 console.setFormatter(f)
 
-file = logging.FileHandler('relational_mimic_indexing.log', 'w', 'utf-8')
+file = logging.FileHandler('relational_dmv_indexing.log', 'w', 'utf-8')
 file.setFormatter(f)
 
 logging.basicConfig(handlers=[console, file], level=logging.DEBUG)
@@ -28,19 +28,17 @@ logging.basicConfig(handlers=[console, file], level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
 
-rel_data = DirectoryEnumerator("../../data_sources/dmv/")
+rel_data = DirectoryEnumerator("../../data_sources/dmv_10k/")
 
-rel_filter: Filter[RelativeFile, QueryInputDocument] = FileLoader(RelationalCsvParser(["dob", "dod", "dod_ssn",
-                                                                                       "CHARTTIME", "VALUE", "starttime", "endtime", "amount", "AMOUNTUOM", "RATE", "RATEUOM", "STORETIME", "PATIENTWEIGHT", "TOTALAMOUNT", "TOTALAMOUNTUOM",
-                                                                                       "VALUENUM", "intime", "outtime", "COMMENTS_DATE", "ORIGINALAMOUNT", "ORIGINALRATE",
-                                                                                       "los", "dod_hosp", "row_id", "STARTDATE", "ENDDATE", "GSN", "NDC", 
-                                                                                       "HADM_ID", "SEQ_NUM", "VALUE", "VALUEUOM",
-                                                                                       "charttime", "storetime",
-                                                                                       "Reg Valid Date",
+rel_filter: Filter[RelativeFile, QueryInputDocument] = FileLoader(RelationalCsvParser(["VIN", "City", "Zip",
+                                                                                       "Model Year", "Make",
+                                                                                       "Unladen Weight",
+                                                                                       "Maximum Gross Weight",
+                                                                                       "Passengers",
                                                                                        "Reg Expiration Date"],
                                                                                       delimiter=',')) | \
                                                                      FileToRelationalInputDocument()
-rel_sink: Sink[List] = SQLRelationalDatabaseWriter(f"dmv_full")
+rel_sink: Sink[List] = SQLRelationalDatabaseWriter(f"dmv_10k_11cols")
 
 preprocessor = Preprocessor(rel_data, [rel_filter > rel_sink])
 preprocessor.run()
