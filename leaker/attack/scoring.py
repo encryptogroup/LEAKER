@@ -285,6 +285,8 @@ class NaruRefinedScoringAttack(RefinedScoringAttack):
 
     def __init__(self, known: SampledSQLRelationalDatabase, known_query_size: float = 0.15, ref_speed: int = 10):
         self.__est = NaruRelationalEstimator(known, known.parent())
+        self.__est_sampling = SamplingRelationalEstimator(known, known.parent())
+        self.__estimation_upper_limit = round(len(known.parent().queries()) * self.__estimation_upper_limit_relative)
         super(NaruRefinedScoringAttack, self).__init__(known, known_query_size, ref_speed)
         self._ref_speed = ref_speed
 
