@@ -12,7 +12,7 @@ import numpy as np
 
 from .count import Countv2
 from .relational_estimators.estimator import NaruRelationalEstimator, SamplingRelationalEstimator
-from ..api import Dataset, LeakagePattern, Extension, RelationalDatabase, RelationalQuery
+from ..api import Dataset, LeakagePattern, Extension
 from ..extension import CoOccurrenceExtension
 from ..pattern import CoOccurrence
 from ..sql_interface import SQLRelationalDatabase
@@ -31,7 +31,7 @@ class ScoringAttack(Countv2):
     _known_keywords: List[str]
 
     def __init__(self, known: Dataset, known_query_size: float = 0.15):
-        log.info(f"Setting up {self.name()} attack for {known.name()}. This might take some time.")
+        #log.info(f"Setting up {self.name()} attack for {known.name()}. This might take some time.")
         super(ScoringAttack, self).__init__(known)
         self._countv2 = None
         self._known_keywords = list(self._known_keywords)
