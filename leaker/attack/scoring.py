@@ -111,7 +111,7 @@ class NaruScoringAttack(ScoringAttack):
     __est_sampling: SamplingRelationalEstimator
 
     ''' Set estimation lower limit absolute (e.g. 1 to skip sampling in 0 case) and upper limit relative (e.g. 0.5% as 
-    in naru paper). Upper absolute limit will then be calculated based on the number of docs in the full dataset. '''
+    in naru paper). Upper absolute limit will then be calculated based on the number of rows in the full dataset. '''
     __estimation_lower_limit = 1
     __estimation_upper_limit_relative = 0.005
     __estimation_upper_limit: int
@@ -127,12 +127,12 @@ class NaruScoringAttack(ScoringAttack):
         return "NaruScoring"
 
     def __calculate_known_cooc(self, q1, q2) -> int:
-        known_cooc = self._known_coocc.co_occurrence(q1, q2)
-        if self.__estimation_lower_limit <= known_cooc <= self.__estimation_upper_limit:
+        sampled_cooc = round(self.__est_sampling.estimate(q1, q2))
+        if self.__estimation_lower_limit <= sampled_cooc <= self.__estimation_upper_limit:
             return round(self.__est.estimate(q1, q2))
         else:
             # use sampling
-            return round(self.__est_sampling.estimate(q1, q2))
+            return sampled_cooc
 
     def recover(self, dataset: Dataset, queries: Iterable[str]) -> List[str]:
         log.info(f"Running {self.name()}")
@@ -275,7 +275,13 @@ class NaruRefinedScoringAttack(RefinedScoringAttack):
     If known_query_size == 0, they will be uncovered like in [CGPR15]
     """
     __est: NaruRelationalEstimator
-    __estimation_lower_limit = 1  # dont estimate known query tuples with a cooc below this value (to estimate all, set to 0)
+    __est_sampling: SamplingRelationalEstimator
+
+    ''' Set estimation lower limit absolute (e.g. 1 to skip sampling in 0 case) and upper limit relative (e.g. 0.5% as 
+    in naru paper). Upper absolute limit will then be calculated based on the number of rows in the full dataset. '''
+    __estimation_lower_limit = 1
+    __estimation_upper_limit_relative = 0.005
+    __estimation_upper_limit: int
 
     def __init__(self, known: SampledSQLRelationalDatabase, known_query_size: float = 0.15, ref_speed: int = 10):
         self.__est = NaruRelationalEstimator(known, known.parent())
@@ -287,11 +293,12 @@ class NaruRefinedScoringAttack(RefinedScoringAttack):
         return "NaruRefinedScoring"
 
     def __calculate_known_cooc(self, q1, q2):
-        known_cooc = self._known_coocc.co_occurrence(q1, q2)
-        if known_cooc >= self.__estimation_lower_limit:
-            return self.__est.estimate(q1, q2)
+        sampled_cooc = round(self.__est_sampling.estimate(q1, q2))
+        if self.__estimation_lower_limit <= sampled_cooc <= self.__estimation_upper_limit:
+            return round(self.__est.estimate(q1, q2))
         else:
-            return known_cooc
+            # use sampling
+            return sampled_cooc
 
     def recover(self, dataset: Dataset, queries: Iterable[str]) -> List[str]:
         log.info(f"Running {self.name()}")
