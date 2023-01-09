@@ -1,18 +1,18 @@
 """
 For License information see the LICENSE file.
 
-Authors: Amos Treiber
+Authors: Amos Treiber, Patrick Ehrler
 
 """
 import logging
 import sys
 
 from leaker.api import Dataset, Selectivity
-from leaker.attack import PartialQuerySpace, Countv2, NaruCount
-from leaker.attack.dummy import DummyRelationalAttack
-from leaker.attack.sap import Sap, RelationalSap, NaruRelationalSap
+from leaker.attack import PartialQuerySpace, Countv2, NaruCount, ScoringAttack, NaruScoringAttack, RefinedScoringAttack, \
+    NaruRefinedScoringAttack, Ikk
+from leaker.attack.sap import Sap, RelationalSap, NaruRelationalSap, NaruRelationalSapFast
 from leaker.evaluation import DatasetSampler, EvaluationCase, QuerySelector, RelationalAttackEvaluator
-from leaker.extension import SelectivityExtension, IdentityExtension, CoOccurrenceExtension
+from leaker.extension import SelectivityExtension
 from leaker.plotting import KeywordMatPlotLibSink
 from leaker.sql_interface import SQLBackend
 
@@ -29,28 +29,21 @@ logging.basicConfig(handlers=[console, file], level=logging.DEBUG)
 
 log = logging.getLogger(__name__)
 
-#import ctypes
-#libgcc_s = ctypes.CDLL('libgcc_s.so.1')
-
 backend = SQLBackend()
 log.info(f"has dbs {backend.data_sets()}")
-mimic_db: Dataset = backend.load("dmv_10k")
-mimic_db.extend_with(SelectivityExtension)
-#mimic_db.extend_with(CoOccurrenceExtension)
+dmv_db: Dataset = backend.load("dmv_10k_11cols")
+dmv_db.extend_with(SelectivityExtension)
+#dmv_db.extend_with(CoOccurrenceExtension)
 
-log.info(f"Loaded {mimic_db.name()} data. {len(mimic_db)} documents with {len(mimic_db.keywords())} words. {mimic_db.has_extension(SelectivityExtension)}")
+log.info(f"Loaded {dmv_db.name()} data. {len(dmv_db)} documents with {len(dmv_db.keywords())} words. {dmv_db.has_extension(SelectivityExtension)}")
 
-attacks = [RelationalSap, NaruRelationalSap]  # the attacks to evaluate
-runs = 3  # Amount of evaluations
-max_keywords = 1000  # restrict base dataset to 1000 queries
-base_restrictions_repetitions = 3  # repeat restriction
-selectivity = Selectivity.Independent  # choose restriction independent
+attacks = [ScoringAttack, NaruScoringAttack, RefinedScoringAttack, NaruRefinedScoringAttack]  # the attacks to evaluate
+runs = 5  # Amount of evaluations
 
 # From this, we can construct a simple EvaluationCase:
-evaluation_case = EvaluationCase(attacks=attacks, dataset=mimic_db, runs=runs, max_keywords=max_keywords,
-                                 base_restrictions_repetitions=base_restrictions_repetitions, selectivity=selectivity)
+evaluation_case = EvaluationCase(attacks=attacks, dataset=dmv_db, runs=runs)
 
-kdr = [.2, .4, .6]  # known data rates
+kdr = [.005, .01, .05, .1, .2, .4, .6, .8]  # known data rates
 reuse = True  # If we reuse sampled datasets a number of times (=> we will have a 5x5 evaluation here)
 # From this, we can construct a DatasetSampler:
 dataset_sampler = DatasetSampler(kdr_samples=kdr, reuse=reuse)
@@ -65,7 +58,7 @@ allow_repetition = False  # If queries can repeat
 query_selector = QuerySelector(query_space=query_space, selectivity=sel, query_space_size=qsp_size, queries=sample_size,
                                allow_repetition=allow_repetition)
 
-out_file = "dmv_test.png"  # Output file (if desired), will be stored in data/figures
+out_file = "scoring_dmv_10k_11cols_500_150(3xpseudoLowTwo)_est1-0.005.png"  # Output file (if desired), will be stored in data/figures
 
 # With these parameters, we can set up the Evaluator:
 eva = RelationalAttackEvaluator(evaluation_case=evaluation_case, dataset_sampler=dataset_sampler,
