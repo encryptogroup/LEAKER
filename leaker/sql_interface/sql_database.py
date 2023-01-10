@@ -188,13 +188,13 @@ class SQLRelationalDatabase(RelationalDatabase):
                 elif sel == Selectivity.Low:
                     queries = list(set([k for k, _ in Counter(queries).most_common()[:-max_queries - 1:-1]]))
                 elif sel == Selectivity.PseudoLow:
-                    queries = list(set(sorted(filter(lambda key: 10 <= self.__parent.selectivity(key), queries),
-                                             key=self.__parent.selectivity)[:max_queries]))
+                    queries = list(set(sorted(filter(lambda key: 10 <= self.selectivity(key), queries),
+                                             key=self.selectivity)[:max_queries]))
                 elif sel == Selectivity.PseudoLowTwo:
-                    queries = list(set(sorted(filter(lambda key: 2 <= self.__parent.selectivity(key), queries),
-                                             key=self.__parent.selectivity)[:max_queries]))
+                    queries = list(set(sorted(filter(lambda key: 2 <= self.selectivity(key), queries),
+                                             key=self.selectivity)[:max_queries]))
                 elif sel == Selectivity.IndependentNotOne:
-                    self.__space.append(set(sample(population=list(filter(lambda key: self.__parent.selectivity(key) >= 2, queries)), k=max_queries)))    
+                    queries = list((set(sample(population=list(filter(lambda key: self.selectivity(key) >= 2, queries)), k=max_queries))))
                 else:
                     queries = list(set(queries))
                     shuffle(queries)
