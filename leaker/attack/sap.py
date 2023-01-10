@@ -202,6 +202,13 @@ class NaruRelationalSap(RelationalSap):
     _known_keywords: Dict
     _delta: float
     __est: NaruRelationalEstimator
+    __est_sampling: SamplingRelationalEstimator
+
+    ''' Set estimation lower limit absolute (e.g. 2 to skip sampling in 1 case) and upper limit relative (e.g. 0.5% as 
+        in naru paper). Upper absolute limit will then be calculated based on the number of rows in the full dataset. '''
+    __estimation_lower_limit = 1
+    __estimation_upper_limit_relative = 0.05
+    __estimation_upper_limit: int
 
     def __init__(self, known: SQLRelationalDatabase):
         """
@@ -220,10 +227,11 @@ class NaruRelationalSap(RelationalSap):
             full = known
 
         self.__est = NaruRelationalEstimator(sample=known, full=full)
-        sampling_estimator = SamplingRelationalEstimator(known, full)
+        self.__est_sampling = SamplingRelationalEstimator(known, full)
+        self.__estimation_upper_limit = round(len(known.parent().queries()) * self.__estimation_upper_limit_relative)
 
         log.debug('Start estimating known queries. This might take a while...')
-        self._known_response_length = self._perform_estimation(self.__est, sampling_estimator, known)
+        self._known_response_length = self._perform_estimation(self.__est, self.__est_sampling, known)
         log.debug('Finished estimating known queries')
 
     @classmethod
@@ -233,11 +241,16 @@ class NaruRelationalSap(RelationalSap):
     def _perform_estimation(self, estimator: RelationalEstimator,
                             sampling_estimator: Optional[SamplingRelationalEstimator], known: SQLRelationalDatabase) \
             -> Dict[str, int]:
-        # overwrite known response length with estimation
+        """ Estimate rlen for all known queries.
+        If sampled rlen is between lower and upper limit, then use naru estimator """
+
         known_response_length: Dict[str, int] = dict()
         for keyword in known.keywords():
-            known_response_length[keyword] = int(estimator.estimate(keyword))
-
+            sampled_rlen = round(self.__est_sampling.estimate(keyword))
+            if self.__estimation_lower_limit <= sampled_rlen <= self.__estimation_upper_limit:
+                known_response_length[keyword] = round(estimator.estimate(keyword))
+            else:
+                known_response_length[keyword] = sampled_rlen
         return known_response_length
 
     def _build_cost_rlen(self, n: int, rlens: List[int]):
