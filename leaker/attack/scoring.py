@@ -36,7 +36,7 @@ class ScoringAttack(Countv2):
         self._countv2 = None
         self._known_keywords = list(self._known_keywords)
         self._known_query_size = known_query_size
-        log.info("Setup complete.")
+        #log.info("Setup complete.")
 
     @classmethod
     def name(cls) -> str:
