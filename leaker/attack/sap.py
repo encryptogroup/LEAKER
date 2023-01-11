@@ -207,7 +207,7 @@ class NaruRelationalSap(RelationalSap):
     ''' Set estimation lower limit absolute (e.g. 2 to skip sampling in 1 case) and upper limit relative (e.g. 0.5% as 
         in naru paper). Upper absolute limit will then be calculated based on the number of rows in the full dataset. '''
     __estimation_lower_limit = 1
-    __estimation_upper_limit_relative = 0.05
+    __estimation_upper_limit_relative = 0.005
     __estimation_upper_limit: int
 
     def __init__(self, known: SQLRelationalDatabase):
