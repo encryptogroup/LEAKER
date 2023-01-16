@@ -40,7 +40,7 @@ rlens.sort(reverse=True)
 print(rlens)
 
 plt.plot(rlens)
-plt.title("DMV 10k")
+plt.title("DMV 100k")
 #plt.yscale('log')
 plt.savefig("power_law_dmv_100k.png")
 dmv_db.close()
