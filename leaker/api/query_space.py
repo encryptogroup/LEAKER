@@ -7,14 +7,14 @@ Authors: Johannes Leupold, Amos Treiber
 from abc import ABC, abstractmethod
 from logging import getLogger
 from random import sample
-from typing import Collection, Set, List, Iterator, Tuple, Any, Dict
+from typing import Collection, Set, List, Iterator, Tuple, Any, Dict, Union
 
 import numpy as np
 
 from .constants import Selectivity
 from .dataset import Dataset, KeywordQueryLog
 from .range_database import RangeDatabase
-from .relational_database import RelationalDatabase
+from .relational_database import RelationalQuery
 
 log = getLogger(__name__)
 
@@ -94,7 +94,7 @@ class KeywordQuerySpace(QuerySpace):
             elif selectivity == Selectivity.Independent:
                 self.__space.append(set(sample(population=candidate_keywords, k=size)))
             elif selectivity == Selectivity.IndependentNotOne:
-                self.__space.append(set(sample(population=list(filter(lambda item: full.selectivity(item[0]) >= 2, candidate_keywords)), k=size)))    
+                self.__space.append(set(sample(population=list(filter(lambda item: full.selectivity(item[0]) >= 2, candidate_keywords)), k=size)))
 
         self.__allow_repetition = allow_repetition
 
