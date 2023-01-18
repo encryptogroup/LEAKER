@@ -137,7 +137,7 @@ class SQLRelationalDatabase(RelationalDatabase):
                     stmt += f" AND attr_id = {attr}"
 
             if sel is not None:
-                if sel == Selectivity.High:
+                if sel == Selectivity.High or Selectivity.HighExceptTopOneHundred:
                     stmt += f" ORDER BY selectivity DESC"
                 elif sel == Selectivity.Low:
                     stmt += f" ORDER BY selectivity ASC"
@@ -178,6 +178,8 @@ class SQLRelationalDatabase(RelationalDatabase):
             if (sel == Selectivity.IndependentNotOne or sel == Selectivity.Independent) and len(queries) > max_queries:
                 # sample queries independently
                 queries = list(sample(queries, max_queries))
+            elif (sel == Selectivity.HighExceptTopOneHundred):
+                queries = queries[100:]
             return queries
         elif not no_restrictions:
             '''Restrict based on stored queries list, not database'''
@@ -433,6 +435,8 @@ class RestrictedSQLRelationalDatabase(SQLRelationalDatabase):
 
             if selectivity == Selectivity.High:
                 queries_restricted = set([k for k, _ in Counter(all_queries).most_common(max_keywords)])
+            elif selectivity == Selectivity.HighExceptTopOneHundred:
+                queries_restricted = set([k for k, _ in Counter(all_queries).most_common(max_keywords)][100:])
             elif selectivity == Selectivity.Low:
                 queries_restricted = set([k for k, _ in Counter(all_queries).most_common()[:-max_keywords - 1:-1]])
             elif selectivity == Selectivity.PseudoLow:
@@ -440,6 +444,9 @@ class RestrictedSQLRelationalDatabase(SQLRelationalDatabase):
                                                 key=self.__parent.selectivity)[:max_keywords])
             elif selectivity == Selectivity.PseudoLowTwo:
                 queries_restricted = set(sorted(filter(lambda key: 2 <= self.__parent.selectivity(key), all_queries),
+                                                key=self.__parent.selectivity)[:max_keywords])
+            elif selectivity == Selectivity.PseudoLowFive:
+                queries_restricted = set(sorted(filter(lambda key: 5 <= self.__parent.selectivity(key), all_queries),
                                                 key=self.__parent.selectivity)[:max_keywords])
             elif selectivity == Selectivity.IndependentNotOne:
                 queries_restricted = set(sample(population=list(filter(lambda key:

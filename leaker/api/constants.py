@@ -51,6 +51,8 @@ class Selectivity(Enum):
                     (only for relational database)
     PseudoLowFive - the query space is populated with the lowest selectivity keywords with a selectivity of at least 5
                     (only for relational database)
+    HighExceptTopOneHundred - the query space is populated with the highest selectivity keywords in the data set, 
+                    except the 100 keywords with the highest selectivity (only for relational database)
     """
     Independent = -1
     High = 0
@@ -59,3 +61,4 @@ class Selectivity(Enum):
     PseudoLowTwo = 3
     IndependentNotOne = 4
     PseudoLowFive = 5
+    HighExceptTopOneHundred = 6

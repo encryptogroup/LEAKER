@@ -83,6 +83,9 @@ class KeywordQuerySpace(QuerySpace):
             if selectivity == Selectivity.High:
                 self.__space.append(set(sorted(candidate_keywords, key=lambda item: full.selectivity(item[0]),
                                                reverse=True)[:size]))
+            if selectivity == Selectivity.HighExceptTopOneHundred:
+                self.__space.append(set(sorted(candidate_keywords, key=lambda item: full.selectivity(item[0]),
+                                               reverse=True)[100:][:size]))
             elif selectivity == Selectivity.Low:
                 self.__space.append(set(sorted(candidate_keywords, key=lambda item: full.selectivity(item[0]))[:size]))
             elif selectivity == Selectivity.PseudoLow:
