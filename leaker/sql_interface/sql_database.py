@@ -153,6 +153,12 @@ class SQLRelationalDatabase(RelationalDatabase):
                     else:
                         stmt += f" WHERE selectivity >= 2"
                     stmt += f" ORDER BY selectivity ASC"
+                elif sel == Selectivity.PseudoLowFive:
+                    if table is not None:
+                        stmt += f" AND selectivity >= 5"
+                    else:
+                        stmt += f" WHERE selectivity >= 5"
+                    stmt += f" ORDER BY selectivity ASC"
                 elif sel == Selectivity.IndependentNotOne:
                     if table is not None:
                         stmt += f" AND selectivity >= 2"

@@ -91,6 +91,9 @@ class KeywordQuerySpace(QuerySpace):
             elif selectivity == Selectivity.PseudoLowTwo:
                 self.__space.append(set(sorted(filter(lambda item: 2 <= full.selectivity(item[0]), candidate_keywords),
                                                key=lambda item: full.selectivity(item[0]))[:size]))
+            elif selectivity == Selectivity.PseudoLowFive:
+                self.__space.append(set(sorted(filter(lambda item: 5 <= full.selectivity(item[0]), candidate_keywords),
+                                               key=lambda item: full.selectivity(item[0]))[:size]))
             elif selectivity == Selectivity.Independent:
                 self.__space.append(set(sample(population=candidate_keywords, k=size)))
             elif selectivity == Selectivity.IndependentNotOne:
