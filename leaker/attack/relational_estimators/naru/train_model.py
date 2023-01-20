@@ -234,11 +234,13 @@ def RunEpoch(split,
 
         if step % log_every == 0:
             if split == 'train':
+                '''
                 print(
                     'Epoch {} Iter {}, {} entropy gap {:.4f} bits (loss {:.3f}, data {:.3f}) {:.5f} lr'
                     .format(epoch_num, step, split,
                             loss.item() / np.log(2) - table_bits,
                             loss.item() / np.log(2), table_bits, lr))
+                '''
             else:
                 print('Epoch {} Iter {}, {} loss {:.4f} nats / {:.4f} bits'.
                       format(epoch_num, step, split, loss.item(),
@@ -264,7 +266,7 @@ def ReportModel(model, blacklist=None):
     num_params = sum(ps)
     mb = num_params * 4 / 1024 / 1024
     print('Number of model parameters: {} (~= {:.1f}MB)'.format(num_params, mb))
-    print(model)
+    #print(model)
     return mb
 
 
