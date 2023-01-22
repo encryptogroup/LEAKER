@@ -355,10 +355,20 @@ class ProgressiveSampling(CardEst):
 
         # Doing this convoluted scheme because m_p[0] is a scalar, and
         # we want the corret shape to broadcast.
+        '''
         p = masked_probs[1]
         for ls in masked_probs[2:]:
             p *= ls
         p *= masked_probs[0]
+        '''
+
+        if len(masked_probs) > 1:
+            p = masked_probs[1]
+            for ls in masked_probs[2:]:
+                p *= ls
+            p *= masked_probs[0]
+        else:
+            p = masked_probs[0]
 
         return p.mean().item()
 

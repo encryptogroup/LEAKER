@@ -1,7 +1,7 @@
 """
 For License information see the LICENSE file.
 
-Authors: Amos Treiber
+Authors: Amos Treiber, Patrick Ehrler
 
 This file provides interfacing to various cardinality estimator implementations.
 
@@ -57,7 +57,7 @@ class NaruRelationalEstimator(RelationalEstimator):
     __hidden_size = [256] * 5  # or large MADE model: [512, 256, 512, 128, 1024]
     __psample = 2000
     __bs = 2048
-    __column_masking = False
+    __column_masking = True
     __residual = True
     __direct_io = True
 
