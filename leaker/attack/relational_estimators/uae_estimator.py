@@ -12,31 +12,32 @@ from leaker.attack.relational_estimators.uae.common import Table, CsvTable, Tabl
 from leaker.attack.relational_estimators.uae.estimators import CardEst, DifferentiableProgressiveSampling, \
     ProgressiveSampling
 from leaker.attack.relational_estimators.uae.train_uae import Entropy, ReportModel, InitWeight, DEVICE, \
-    RunEpoch
+    RunEpoch, RunQueryEpoch
 from leaker.extension import PandasExtension
 
 
 class UaeRelationalEstimator(RelationalEstimator):
     """Uses the UAE estimator of Qu et al.: https://github.com/pagegitss/UAE"""
 
+    _run_uaeq = True  # if true, only uae-q is used
+    _q_bs = 100  # only used for uae-q only
     _table_dict: Dict[int, Tuple[Table, Table]]
     __epochs: int
-    __batch_size: int
-    __nr_train_queries: int
-    __scale = 128
-    __layers = 2
+    _estimator: Union[None, Dict[int, CardEst]] = None
+    __hidden_size = [256] * 5  # or large MADE model: [512, 256, 512, 128, 1024]
     __psample = 200  # figure 4a, UAE paper
     __diff_psample = 200  # figure 4a, UAE paper
-    _estimator: Union[None, Dict[int, CardEst]] = None
+    __batch_size = 2048
+    __column_masking = True
+    __residual = True
+    __direct_io = True
+    __nr_train_queries: int = 100
 
     # TODO: In UAE github example: epochs=50
     #  batch-size=4096, here not possible because of but error
-    def __init__(self, sample: RelationalDatabase, full: RelationalDatabase, epochs: int = 30, batch_size: int = 1024,
-                 nr_train_queries: int = 100):
+    def __init__(self, sample: RelationalDatabase, full: RelationalDatabase, epochs: int = 20):
         self._table_dict = dict()
         self.__epochs = epochs
-        self.__batch_size = batch_size
-        self.__nr_train_queries = nr_train_queries
         super().__init__(sample, full)
 
         if not self._dataset_sample.has_extension(PandasExtension):
@@ -80,12 +81,16 @@ class UaeRelationalEstimator(RelationalEstimator):
 
             model = made.MADE(
                 nin=len(table.columns),
-                hidden_sizes=[self.__scale] * self.__layers,
+                hidden_sizes=self.__hidden_size,
                 nout=sum([c.DistributionSize() for c in table.columns]),
                 input_bins=[c.DistributionSize() for c in table.columns],
-                embed_size=32,
-                column_masking=True,
                 input_encoding='binary',
+                output_encoding='one_hot',
+                embed_size=32,
+                do_direct_io_connections=self.__direct_io,
+                residual_connections=self.__residual,
+                # fixed_ordering=fixed_ordering,
+                column_masking=self.__column_masking,
             ).to(DEVICE)
 
             ReportModel(model)
@@ -111,7 +116,7 @@ class UaeRelationalEstimator(RelationalEstimator):
                 vals = [query.value]
                 # calculate selectivity of query based on full table
                 sel = len([1 for x in self._full(query) if x[0] == table_id]) / \
-                      len(list([1 for x in self._full.documents() if x[0] == table_id]))
+                      len(list([1 for x in self._full.row_ids() if x[0] == table_id]))
                 columns_list.append(cols)
                 operators_list.append(ops)
                 vals_list.append(vals)
@@ -119,16 +124,19 @@ class UaeRelationalEstimator(RelationalEstimator):
 
             total_query_num = len(card_list)
 
-            num_steps = table.cardinality / self.__batch_size
-            q_bs = math.ceil(total_query_num / num_steps)
-            q_bs = int(q_bs)
+            if self._run_uaeq:
+                q_bs = self._q_bs
+            else:
+                num_steps = table.cardinality / self.__batch_size
+                q_bs = math.ceil(total_query_num / num_steps)
+                q_bs = int(q_bs)
 
             diff_estimator = DifferentiableProgressiveSampling(model=model,
                                                                table=table,
                                                                r=self.__diff_psample,
                                                                batch_size=q_bs,
                                                                device=DEVICE,
-                                                               shortcircuit=True,
+                                                               shortcircuit=self.__column_masking,
                                                                )
 
             wildcard_indicator, valid_i_list = diff_estimator.ProcessQuery(self._dataset_sample.name(), columns_list,
@@ -141,28 +149,42 @@ class UaeRelationalEstimator(RelationalEstimator):
             for epoch in range(self.__epochs):
                 torch.set_grad_enabled(True)
                 model.train()
-                mean_epoch_train_loss = RunEpoch('train',
-                                                 model,
-                                                 diff_estimator,
-                                                 valid_i_list,
-                                                 wildcard_indicator,
-                                                 card_list,
-                                                 opt,
-                                                 n_cols=n_cols,
-                                                 train_data=train_data,
-                                                 val_data=train_data,
-                                                 batch_size=self.__batch_size,
-                                                 q_bs=q_bs,
-                                                 epoch_num=epoch,
-                                                 log_every=10,
-                                                 table_bits=table_bits)
+
+                if not self._run_uaeq:
+                    mean_epoch_train_loss = RunEpoch('train',
+                                                     model,
+                                                     diff_estimator,
+                                                     valid_i_list,
+                                                     wildcard_indicator,
+                                                     card_list,
+                                                     opt,
+                                                     n_cols=n_cols,
+                                                     train_data=train_data,
+                                                     val_data=train_data,
+                                                     batch_size=self.__batch_size,
+                                                     q_bs=q_bs,
+                                                     epoch_num=epoch,
+                                                     return_losses=True,
+                                                     table_bits=table_bits)
+                else:
+                    mean_epoch_train_loss = RunQueryEpoch('train',
+                                                          model,
+                                                          diff_estimator,
+                                                          valid_i_list,
+                                                          wildcard_indicator,
+                                                          card_list,
+                                                          table.cardinality,
+                                                          opt,
+                                                          n_cols=n_cols,
+                                                          batch_size=q_bs,
+                                                          epoch_num=epoch)
 
             ReportModel(model)
             model.eval()
             estimator = ProgressiveSampling(model, table, self.__psample,
                                             device=DEVICE,
                                             cardinality=full_table.cardinality,
-                                            #shortcircuit=True # TODO: should be true, but error in this case
+                                            shortcircuit=self.__column_masking
                                             )
 
             self._estimator[table_id] = estimator

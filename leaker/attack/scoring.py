@@ -12,6 +12,7 @@ import numpy as np
 
 from .count import Countv2
 from .relational_estimators.estimator import NaruRelationalEstimator, SamplingRelationalEstimator
+from .relational_estimators.uae_estimator import UaeRelationalEstimator
 from ..api import Dataset, LeakagePattern, Extension
 from ..extension import CoOccurrenceExtension
 from ..pattern import CoOccurrence
@@ -133,6 +134,63 @@ class NaruScoringAttack(ScoringAttack):
         else:
             # use sampling
             return sampled_cooc
+
+    def recover(self, dataset: Dataset, queries: Iterable[str]) -> List[str]:
+        log.info(f"Running {self.name()}")
+        queries = list(queries)
+        coocc = self.required_leakage()[0](dataset, queries)
+
+        known_queries = self._get_known_queries(dataset, queries)
+
+        k = len(known_queries)
+        known_queries_pos = [i for i in known_queries.keys()]
+
+        coocc_s_td = np.zeros((len(queries), k))
+        for i in range(len(queries)):
+            for j in range(k):
+                coocc_s_td[i][j] = coocc[i][known_queries_pos[j]]
+
+        coocc_s_kw = np.zeros((len(self._known_keywords), k))
+        for i in range(len(self._known_keywords)):
+            for j in range(k):
+                coocc_s_kw[i][j] = self.__calculate_known_cooc(self._known_keywords[i],
+                                                               known_queries[known_queries_pos[j]])
+
+        for i, _ in enumerate(queries):
+            if i not in known_queries:
+                scores = coocc_s_kw - coocc_s_td[i].T
+                scores = -np.log(np.linalg.norm(scores, axis=1))
+                known_queries[i] = self._known_keywords[np.argmax(scores)]
+
+        uncovered = []
+        for i, _ in enumerate(queries):
+            if i in known_queries:
+                uncovered.append(known_queries[i])
+            else:
+                uncovered.append("")
+
+        log.info(f"Reconstruction completed.")
+
+        return uncovered
+
+
+class UaeScoringAttack(ScoringAttack):
+    """
+    Implements the Scoring attack from [DHP21]. Using naru co-occurrence estimates. If known_query_size == 0, they will be uncovered like in [CGPR15]
+    """
+
+    __est: UaeRelationalEstimator
+
+    def __init__(self, known: SQLRelationalDatabase, known_query_size: float = 0.15):
+        self.__est = UaeRelationalEstimator(known, known.parent())
+        super(UaeScoringAttack, self).__init__(known, known_query_size)
+
+    @classmethod
+    def name(cls) -> str:
+        return "UaeScoring"
+
+    def __calculate_known_cooc(self, q1, q2) -> int:
+        return round(self.__est.estimate(q1, q2))
 
     def recover(self, dataset: Dataset, queries: Iterable[str]) -> List[str]:
         log.info(f"Running {self.name()}")
