@@ -359,10 +359,23 @@ class ProgressiveSampling(CardEst):
 
         # Doing this convoluted scheme because m_p[0] is a scalar, and
         # we want the corret shape to broadcast.
+        '''
+        We change the code here, to also support column masking in the case of single query predicates.
+        Otherwise we would get an error in these cases, because len(masked_props) is 1.
+        '''
+        '''
         p = masked_probs[1]
         for ls in masked_probs[2:]:
             p *= ls
         p *= masked_probs[0]
+        '''
+        if len(masked_probs) > 1:
+            p = masked_probs[1]
+            for ls in masked_probs[2:]:
+                p *= ls
+            p *= masked_probs[0]
+        else:
+            p = masked_probs[0]
 
         return p.mean().item()
 
@@ -989,28 +1002,12 @@ class DifferentiableProgressiveSampling(CardEst):
 
         # Doing this convoluted scheme because m_p[0] is a scalar, and
         # we want the correct shape to broadcast.
-
-        '''
-            We change the code here, to also support column masking in the case of single query predicates.
-            Otherwise we would get an error in these cases, because len(masked_props) is 1.
-        '''
-        '''
         p = masked_probs[1]  # [bs, num_samples]
         for ls in masked_probs[2:]:
             p *= ls
 
         p_0 = masked_probs[0] # [bs, 1]
         p *= p_0
-        '''
-        if len(masked_probs) > 1:
-            p = masked_probs[1]  # [bs, num_samples]
-            for ls in masked_probs[2:]:
-                p *= ls
-
-            p_0 = masked_probs[0]  # [bs, 1]
-            p *= p_0
-        else:
-            p = masked_probs[0]
 
         return p.mean(dim=1)  # [batch_size], [batch_size, -1]
 
