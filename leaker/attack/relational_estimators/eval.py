@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 from leaker.api import RelationalDatabase, RelationalQuery, Selectivity
 from leaker.attack.relational_estimators.estimator import NaruRelationalEstimator, KDERelationalEstimator, \
     SamplingRelationalEstimator, RelationalEstimator
+from leaker.attack.relational_estimators.uae_estimator import UaeRelationalEstimator
 from leaker.extension import IdentityExtension, CoOccurrenceExtension
 from leaker.sql_interface import SQLBackend
 
@@ -32,6 +33,7 @@ log = logging.getLogger(__name__)
 backend = SQLBackend()
 log.info(f"has dbs {backend.data_sets()}")
 mimic_db: RelationalDatabase = backend.load(dataset)
+#mimic_db: RelationalDatabase = backend.load(dataset).restrict_keyword_size(1000, Selectivity.Independent)
 log.info(
     f"Loaded {mimic_db.name()} data. {len(mimic_db)} documents with {len(mimic_db.keywords())} words. {mimic_db.has_extension(IdentityExtension)}")
 
@@ -159,7 +161,7 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, sel=Selectivity.Independent,
             sampling_est = SamplingRelationalEstimator(sample=sampled_db, full=mimic_db)
             log.info('SAMPLING')
             results_list.append(
-                ('SAMPLING-' + str(known_data_rate),) + evaluate_estimator(sampling_est, kw_sample, use_cooc, ignore_zero_one))
+               ('SAMPLING-' + str(known_data_rate),) + evaluate_estimator(sampling_est, kw_sample, use_cooc, ignore_zero_one))
 
             # NAIVE
             # naive_est = NaiveRelationalEstimator(sample=sampled_db, full=mimic_db)
@@ -167,16 +169,18 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, sel=Selectivity.Independent,
             # results_list.append(('NAIVE-' + str(known_data_rate),) + evaluate_estimator(naive_est, kw_sample, use_cooc, ignore_zero_one))
 
             # KDE Estimator
-            kde_est = KDERelationalEstimator(sample=sampled_db, full=mimic_db)
-            log.info('KDE')
-            results_list.append(('KDE-' + str(known_data_rate),) + evaluate_estimator(kde_est, kw_sample, use_cooc, ignore_zero_one))
+            #kde_est = KDERelationalEstimator(sample=sampled_db, full=mimic_db)
+            #log.info('KDE')
+            #results_list.append(('KDE-' + str(known_data_rate),) + evaluate_estimator(kde_est, kw_sample, use_cooc, ignore_zero_one))
 
             # UAE Estimator
-            # uae_est = UaeRelationalEstimator(sample=sampled_db, full=mimic_db, nr_train_queries=200)
+            nr_of_train_queries = min(len(sampled_db.keywords()), 100)
+            train_queries = list(map(lambda x: [x], sample(sampled_db.keywords(), nr_of_train_queries)))
+            uae_est = UaeRelationalEstimator(sample=sampled_db, full=mimic_db, train_queries=train_queries)
             # 20000 training queries in UAE paper
-            # log.info('UAE')
-            # results_list.append(
-            #    ('UAE-' + str(known_data_rate) + '-200',) + evaluate_estimator(uae_est, kw_sample, use_cooc, ignore_zero_one))
+            log.info('UAE')
+            results_list.append(
+               ('UAE-' + str(known_data_rate) + '-100',) + evaluate_estimator(uae_est, kw_sample, use_cooc, ignore_zero_one))
 
             # Neurocard Estimator
             # neurocard_est = NeurocardRelationalEstimator(sample=sampled_db, full=mimic_db)
@@ -185,9 +189,9 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, sel=Selectivity.Independent,
             #    ('Neurocard-' + str(known_data_rate),) + evaluate_estimator(neurocard_est, kw_sample, use_cooc, ignore_zero_one))
 
             # NARU Estimator
-            naru_est = NaruRelationalEstimator(sample=sampled_db, full=mimic_db)
-            log.info('NARU')
-            results_list.append(('NARU-' + str(known_data_rate),) + evaluate_estimator(naru_est, kw_sample, use_cooc, ignore_zero_one))
+            #naru_est = NaruRelationalEstimator(sample=sampled_db, full=mimic_db)
+            #log.info('NARU')
+            #results_list.append(('NARU-' + str(known_data_rate),) + evaluate_estimator(naru_est, kw_sample, use_cooc, ignore_zero_one))
 
     if ignore_zero_one:
         df = pandas.DataFrame(data=[el[:5] for el in results_list], columns=['method', 'median', '.95', '.99', 'max'])
@@ -216,5 +220,5 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, sel=Selectivity.Independent,
     mimic_db.close()
 
 
-run_rlen_eval(nr_of_evals=5, nr_of_queries=1000, use_cooc=False, ignore_zero_one=False)
+run_rlen_eval(nr_of_evals=5, nr_of_queries=1000, use_cooc=False, ignore_zero_one=True, sel=Selectivity.Independent)
 # print(evaluate_actual_rlen(mimic_db.keywords()))
