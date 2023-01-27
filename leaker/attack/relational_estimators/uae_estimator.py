@@ -31,11 +31,11 @@ class UaeRelationalEstimator(RelationalEstimator):
     __column_masking = True
     __residual = True
     __direct_io = True
-    __train_queries: List[RelationalQuery]  # true cardinalities are calculated based on full database
+    __train_queries: List[List[RelationalQuery]]  # true cardinalities are calculated based on full database
 
     # TODO: In UAE github example: epochs=50
     #  batch-size=4096, here not possible because of but error
-    def __init__(self, sample: RelationalDatabase, full: RelationalDatabase, train_queries: List[RelationalQuery],
+    def __init__(self, sample: RelationalDatabase, full: RelationalDatabase, train_queries: List[List[RelationalQuery]],
                  epochs: int = 20):
         self._table_dict = dict()
         self.__epochs = epochs
@@ -110,16 +110,23 @@ class UaeRelationalEstimator(RelationalEstimator):
             card_list = []
 
             for query in self.__train_queries:
-                cols = [f'attr_{query.attr}']
-                ops = ['=']
-                vals = [query.value]
+                cols = []
+                ops = []
+                vals = []
+                sub_rids = []  # list with rids of sub-parts of query (each individual predicate)
+                for query_item in query:
+                    cols.append(f'attr_{query_item.attr}')
+                    ops.append('=')
+                    vals.append(query_item.value)
+                    sub_rids.append([x for x in list(self._full.query(query_item)) if x[0] == table_id])
                 # calculate selectivity of query based on full table
-                sel = len([1 for x in self._full(query) if x[0] == table_id]) / \
-                      len(list([1 for x in self._full.row_ids() if x[0] == table_id]))
-                columns_list.append(cols)
-                operators_list.append(ops)
-                vals_list.append(vals)
-                card_list.append(sel)
+                rlen = len(set.intersection(*map(set, sub_rids)))
+                sel = rlen / len([1 for _ in self._full.row_ids(table_id)])
+                if sel > 0:
+                    columns_list.append(cols)
+                    operators_list.append(ops)
+                    vals_list.append(vals)
+                    card_list.append(sel)
 
             total_query_num = len(card_list)
 
