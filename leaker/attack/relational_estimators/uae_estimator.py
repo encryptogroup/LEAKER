@@ -3,9 +3,9 @@ import random
 
 import numpy as np
 import torch
-from typing import Dict, Tuple, Union, Optional
+from typing import Dict, Tuple, Union, Optional, List
 
-from leaker.api import RelationalDatabase, RelationalKeyword
+from leaker.api import RelationalDatabase, RelationalKeyword, RelationalQuery
 from leaker.attack.relational_estimators.estimator import RelationalEstimator
 from leaker.attack.relational_estimators.uae import made
 from leaker.attack.relational_estimators.uae.common import Table, CsvTable, TableDataset
@@ -31,13 +31,15 @@ class UaeRelationalEstimator(RelationalEstimator):
     __column_masking = True
     __residual = True
     __direct_io = True
-    __nr_train_queries: int = 100
+    __train_queries: List[RelationalQuery]  # true cardinalities are calculated based on full database
 
     # TODO: In UAE github example: epochs=50
     #  batch-size=4096, here not possible because of but error
-    def __init__(self, sample: RelationalDatabase, full: RelationalDatabase, epochs: int = 20):
+    def __init__(self, sample: RelationalDatabase, full: RelationalDatabase, train_queries: List[RelationalQuery],
+                 epochs: int = 20):
         self._table_dict = dict()
         self.__epochs = epochs
+        self.__train_queries = train_queries
         super().__init__(sample, full)
 
         if not self._dataset_sample.has_extension(PandasExtension):
@@ -102,15 +104,12 @@ class UaeRelationalEstimator(RelationalEstimator):
             train_data = TableDataset(table_train)
             n_cols = len(table.columns)
 
-            # sample training queries randomly from full table
-            query_list = random.sample(self._full.queries(table=table_id), self.__nr_train_queries)
-
             columns_list = []
             operators_list = []
             vals_list = []
             card_list = []
 
-            for query in query_list:
+            for query in self.__train_queries:
                 cols = [f'attr_{query.attr}']
                 ops = ['=']
                 vals = [query.value]
@@ -173,7 +172,7 @@ class UaeRelationalEstimator(RelationalEstimator):
                                                           valid_i_list,
                                                           wildcard_indicator,
                                                           card_list,
-                                                          table.cardinality,
+                                                          full_table.cardinality,  # not used
                                                           opt,
                                                           n_cols=n_cols,
                                                           batch_size=q_bs,
