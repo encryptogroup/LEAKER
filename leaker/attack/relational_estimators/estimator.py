@@ -19,7 +19,7 @@ from .naru.estimators import ProgressiveSampling, CardEst
 from .naru.train_model import MakeMade, ReportModel, transformer, InitWeight, RunEpoch, Entropy, DEVICE
 
 from ...api import RelationalDatabase, RelationalKeyword
-from ...extension import PandasExtension
+from ...extension import PandasExtension, CoOccurrenceExtension
 from ...sql_interface import SQLRelationalDatabase
 
 
@@ -272,9 +272,15 @@ class SamplingRelationalEstimator(RelationalEstimator):
     """
     _full_cardinality: Dict[int, int]
     _sample_cardinality: Dict[int, int]
+    _sample_cooc_ext: CoOccurrenceExtension
 
     def __init__(self, sample: RelationalDatabase, full: RelationalDatabase):
         super().__init__(sample, full)
+
+        if not self._dataset_sample.has_extension(CoOccurrenceExtension):
+            self._dataset_sample.extend_with(CoOccurrenceExtension)
+
+        self._sample_cooc_ext = self._dataset_sample.get_extension(CoOccurrenceExtension)
 
         self._full_cardinality = self._calculate_cardinality(self._full)
         self._sample_cardinality = self._calculate_cardinality(self._dataset_sample)
@@ -292,11 +298,12 @@ class SamplingRelationalEstimator(RelationalEstimator):
 
     def estimate(self, kw: RelationalKeyword, kw2: Optional[RelationalKeyword] = None) -> float:
         if kw2 is None:
-            rel_selectivity = (self._dataset_sample.selectivity(kw) / self._sample_cardinality[kw.table])
-            return rel_selectivity * self._full_cardinality[kw.table]
+            rel_sample = self._dataset_sample.selectivity(kw)
+            scale_factor = self._full_cardinality[kw.table] / self._sample_cardinality[kw.table]
+            return rel_sample * scale_factor
         else:
-            rlen_sample = len([i for i in self._dataset_sample(kw) if i in self._dataset_sample(kw2)])
+            rlen_sample = self._sample_cooc_ext.co_occurrence(kw, kw2)
             # if rlen>0, then kw and kw2 are from the same table; therefore sample cardinality is the same
-            rel_selectivity = rlen_sample / self._sample_cardinality[kw.table]
-            return rel_selectivity * self._full_cardinality[kw.table]
+            scale_factor = self._full_cardinality[kw.table] / self._sample_cardinality[kw.table]
+            return rlen_sample * scale_factor
 
