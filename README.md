@@ -20,6 +20,7 @@ Currently, LEAKER includes the following attacks:
     - [[BKM20]](https://eprint.iacr.org/2019/1175)
     - [[RPH21]](https://doi.org/10.1007/978-3-030-78375-4_7)
     - [[NHP+21]](https://doi.org/10.1145/3460120.3484540)
+    - [[DHP21]](https://www.usenix.org/system/files/sec21-damie.pdf)
 ---
 
 #### Requirements
@@ -70,7 +71,7 @@ To generate the documentation: enter `pdoc --html leaker` with LEAKER/ as the cu
 
 #### Acknowledgements
 
-This framework has been developed by Patrick Ehrler, Abdelkarim Kati, Johannes Leupold, Tobias Stöckert, Amos Treiber, and Michael Yonli.
+This framework has been developed by Nelson Brüchmann, Patrick Ehrler, Abdelkarim Kati, Johannes Leupold, Tobias Stöckert, Amos Treiber, and Michael Yonli.
 
 The framework also uses [code by Ruben Groot Roessink](https://github.com/rubengrootroessink/IKK-query-recovery-attack) for its IKK attack optimization, which is located in the folder `ikk_roessink` and released under the
 license `ikk_roessink/LICENSE.MD`.
