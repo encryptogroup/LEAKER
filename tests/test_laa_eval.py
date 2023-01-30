@@ -17,7 +17,7 @@ from leaker.api import DataSink, RandomRangeDatabase, InputDocument, RangeDataba
     PermutedBetaRandomRangeDatabase, BTRangeDatabase, ABTRangeDatabase, Selectivity
 from leaker.attack import SubgraphVL, VolAn, SelVolAn, SubgraphID, Countv2, LMPrid, LMPrank, ApproxValue, \
     LMPaux, ApproxOrder, GJWbasic, GJWspurious, GJWmissing, GLMP18, LMPappRec, Arrorder, GJWpartial, \
-    RangeCountBaselineAttack, Apa
+    RangeCountBaselineAttack, Apa, Score, RefinedScore
 from leaker.attack.kkno import GeneralizedKKNO
 from leaker.attack.leap import Leap
 from leaker.attack.query_space import MissingBoundedRangeQuerySpace, ShortRangeQuerySpace, \
@@ -128,14 +128,19 @@ def test_keyword_attack():
 
     def verif_cb(series_id: str, kdr: float, rr: float, n: int) -> None:
         golden_dict = {0.25: 0.01, 0.5: 0.1, 0.75: 0.2, 1: 0.5}
-        if series_id != "Countv2":
+        
+        if series_id == "Score" or series_id == "RefinedScore":
+            assert (rr >= golden_dict[kdr] or rr <= 0.25)
+        elif series_id != "Countv2":
             assert (rr >= golden_dict[kdr])
+        
 
     verifier = EvaluatorTestSink(verif_cb)
 
     run = KeywordAttackEvaluator(evaluation_case=EvaluationCase(attacks=[VolAn, SelVolAn,
                                                                          SubgraphID.definition(epsilon=13),
-                                                                         SubgraphVL.definition(epsilon=7), Countv2],
+                                                                         SubgraphVL.definition(epsilon=7), Countv2,
+                                                                         Score, RefinedScore],
                                                                 dataset=random_words, runs=1),
                                  dataset_sampler=DatasetSampler(kdr_samples=[0.25, 0.5, 0.75, 1.0], reuse=True,
                                                                 monotonic=False),
