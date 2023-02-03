@@ -418,6 +418,63 @@ class SamplingScoringAttack(ScoringAttack):
         return uncovered
 
 
+class PerfectScoringAttack(ScoringAttack):
+    """
+    Implements the Scoring attack from [DHP21]. Using perfect co-occurrences.
+    If known_query_size == 0, they will be uncovered like in [CGPR15]
+    """
+
+    __est_sampling: SamplingRelationalEstimator
+
+    def __init__(self, known: SQLRelationalDatabase, known_query_size: float = 0.15):
+        self.__est_sampling = SamplingRelationalEstimator(known, known.parent())
+        super(PerfectScoringAttack, self).__init__(known, known_query_size)
+
+    @classmethod
+    def name(cls) -> str:
+        return "PerfectScoring"
+
+    def recover(self, dataset: Dataset, queries: Iterable[str]) -> List[str]:
+        log.info(f"Running {self.name()}")
+        queries = list(queries)
+        full_cooc_ext = dataset.get_extension(CoOccurrenceExtension)
+
+        coocc = self.required_leakage()[0](dataset, queries)
+
+        known_queries = self._get_known_queries(dataset, queries)
+
+        k = len(known_queries)
+        known_queries_pos = [i for i in known_queries.keys()]
+
+        coocc_s_td = np.zeros((len(queries), k))
+        for i in range(len(queries)):
+            for j in range(k):
+                coocc_s_td[i][j] = coocc[i][known_queries_pos[j]]
+
+        coocc_s_kw = np.zeros((len(self._known_keywords), k))
+        for i in range(len(self._known_keywords)):
+            for j in range(k):
+                coocc_s_kw[i][j] = full_cooc_ext.co_occurrence(self._known_keywords[i],
+                                                               known_queries[known_queries_pos[j]])
+
+        for i, _ in enumerate(queries):
+            if i not in known_queries:
+                scores = coocc_s_kw - coocc_s_td[i].T
+                scores = -np.log(np.linalg.norm(scores, axis=1))
+                known_queries[i] = self._known_keywords[np.argmax(scores)]
+
+        uncovered = []
+        for i, _ in enumerate(queries):
+            if i in known_queries:
+                uncovered.append(known_queries[i])
+            else:
+                uncovered.append("")
+
+        log.info(f"Reconstruction completed.")
+
+        return uncovered
+
+
 class RefinedScoringAttack(ScoringAttack):
     """
     Implements the refined Scoring attack from [DHP21]. If known_query_size == 0, they will be uncovered like in
