@@ -138,7 +138,7 @@ class UaeRelationalEstimator(RelationalEstimator):
                 q_bs = int(q_bs)
 
             diff_estimator = DifferentiableProgressiveSampling(model=model,
-                                                               table=table,
+                                                               table=full_table,  # seems to be only used for column information
                                                                r=self.__diff_psample,
                                                                batch_size=q_bs,
                                                                device=DEVICE,
