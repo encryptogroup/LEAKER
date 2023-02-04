@@ -174,14 +174,14 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, sel=Selectivity.Independent,
             #results_list.append(('KDE-' + str(known_data_rate),) + evaluate_estimator(kde_est, kw_sample, use_cooc, ignore_zero_one))
 
             # UAE Estimator
-            nr_of_train_queries = int(len(sampled_db.keywords()) * 0.15)
+            #nr_of_train_queries = int(len(sampled_db.keywords()) * 0.15)
             #nr_of_train_queries = min(len(sampled_db.keywords()), 100)
-            train_queries = list(map(lambda x: [x], sample(sampled_db.keywords(), nr_of_train_queries)))
-            uae_est = UaeRelationalEstimator(sample=sampled_db, full=mimic_db, train_queries=train_queries)
+            #train_queries = list(map(lambda x: [x], sample(sampled_db.keywords(), nr_of_train_queries)))
+            #uae_est = UaeRelationalEstimator(sample=sampled_db, full=mimic_db, train_queries=train_queries)
             # 20000 training queries in UAE paper
-            log.info('UAE')
-            results_list.append(
-               ('UAE-' + str(known_data_rate) + '-15%',) + evaluate_estimator(uae_est, kw_sample, use_cooc, ignore_zero_one))
+            #log.info('UAE')
+            #results_list.append(
+            #   ('UAE-' + str(known_data_rate) + '-15%',) + evaluate_estimator(uae_est, kw_sample, use_cooc, ignore_zero_one))
 
             # Neurocard Estimator
             # neurocard_est = NeurocardRelationalEstimator(sample=sampled_db, full=mimic_db)
@@ -221,5 +221,6 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, sel=Selectivity.Independent,
     mimic_db.close()
 
 
-run_rlen_eval(nr_of_evals=5, nr_of_queries=1000, use_cooc=False, ignore_zero_one=True, sel=Selectivity.Independent)
-# print(evaluate_actual_rlen(mimic_db.keywords()))
+if __name__ == "__main__":
+    run_rlen_eval(nr_of_evals=5, nr_of_queries=1000, use_cooc=False, ignore_zero_one=True, sel=Selectivity.Independent)
+    # print(evaluate_actual_rlen(mimic_db.keywords()))
