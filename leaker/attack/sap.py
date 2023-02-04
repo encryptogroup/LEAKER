@@ -38,7 +38,7 @@ def compute_log_binomial_probability_matrix(ntrials, probabilities, observations
     probabilities = np.array(probabilities)
     probabilities[probabilities == 0] = min(probabilities[
                                                 probabilities > 0]) / 100  # To avoid numerical errors. An error would mean the adversary information is very off.
-    probabilities[probabilities == 1.0] = 0.9999  # prevent log(0)
+    probabilities[probabilities == 1.0] = 0.999999  # prevent log(0)
     log_binom_term = np.array([_log_binomial(ntrials, obs / ntrials) for obs in observations])  # ROW TERM
     column_term = np.array([np.log(probabilities) - np.log(1 - np.array(probabilities))]).T  # COLUMN TERM
     last_term = np.array([ntrials * np.log(1 - np.array(probabilities))]).T  # COLUMN TERM
@@ -171,6 +171,75 @@ class RelationalSap(KeywordAttack):
     def _build_cost_rlen(self, n: int, rlens: List[int]):
 
         kw_probs_train = [self._known_response_length[self._known_keywords[i]] / len(self._known().doc_ids())
+                          for i in range(len(self._known().keywords()))]
+        log_prob_matrix = compute_log_binomial_probability_matrix(n, kw_probs_train, rlens)
+        cost_vol = - log_prob_matrix
+        return cost_vol
+
+    def recover(self, dataset: Dataset, queries: Iterable[RelationalQuery]) -> List[str]:
+        log.info(f"Running {self.name()} at {self._delta:.3f}")
+        queries = list(queries)
+        leakage = list(self.required_leakage()[0](dataset, queries))
+
+        rlen_cost = self._build_cost_rlen(len(dataset.doc_ids()), rlens=[l for l in leakage])
+        total_cost = rlen_cost
+
+        row_ind, col_ind = hungarian(total_cost)
+
+        res = ["" for _ in range(len(leakage))]
+
+        for i, j in zip(col_ind, row_ind):
+            res[i] = self._known_keywords[j]
+
+        return res
+
+
+class PerfectRelationalSap(KeywordAttack):
+    """
+    Implements the SAP attack from Oya & Kerschbaum for relational data using only ResponseLength patterns (no volume patterns).
+    Uses perfect estimates for rlen.
+    """
+    _known_response_length: Dict[str, int]
+    _known_keywords: Dict
+    _delta: float
+    _full_size: int
+
+    def __init__(self, known: SQLRelationalDatabase):
+        super(PerfectRelationalSap, self).__init__(known)
+
+        if not known.has_extension(IdentityExtension):
+            known.extend_with(IdentityExtension)
+        #id_extension = known.get_extension(IdentityExtension)
+        full_id_extension = known.parent().get_extension(IdentityExtension)
+        self._full_size = len(known.parent().doc_ids())
+
+        self._delta = known.sample_rate()
+
+        self._known_response_length = dict()
+        self._known_keywords = dict()
+
+        i = 0
+        for keyword in known.keywords():
+            self._known_keywords[i] = keyword
+            self._known_keywords[keyword] = i
+            i += 1
+            self._known_response_length[keyword] = len(full_id_extension.doc_ids(keyword))
+
+    @classmethod
+    def name(cls) -> str:
+        return "Perfect-Relational-SAP"
+
+    @classmethod
+    def required_leakage(cls) -> List[LeakagePattern[Any]]:
+        return [ResponseLength()]
+
+    @classmethod
+    def required_extensions(cls) -> Set[Type[E]]:
+        return {IdentityExtension}
+
+    def _build_cost_rlen(self, n: int, rlens: List[int]):
+
+        kw_probs_train = [self._known_response_length[self._known_keywords[i]] / self._full_size
                           for i in range(len(self._known().keywords()))]
         log_prob_matrix = compute_log_binomial_probability_matrix(n, kw_probs_train, rlens)
         cost_vol = - log_prob_matrix
