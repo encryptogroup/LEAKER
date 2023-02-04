@@ -12,6 +12,7 @@ import numpy as np
 
 from .count import Countv2
 from .relational_estimators.estimator import NaruRelationalEstimator, SamplingRelationalEstimator
+from .relational_estimators.eval import ErrorMetric
 from .relational_estimators.uae_estimator import UaeRelationalEstimator
 from ..api import Dataset, LeakagePattern, Extension
 from ..extension import CoOccurrenceExtension
@@ -252,11 +253,13 @@ class UaeScoringAttack(ScoringAttack):
         log.info(f"Running {self.name()}")
         queries = list(queries)
         coocc = self.required_leakage()[0](dataset, queries)
+        cooc_ext = dataset.get_extension(CoOccurrenceExtension)
 
         known_queries = self._get_known_queries(dataset, queries)
 
         # train uae estimator based on known queries
-        self.__est = UaeRelationalEstimator(self._known(), dataset, [[q] for q in known_queries.values()])
+        train_queries = [[q1, q2] for q1 in known_queries.values() for q2 in known_queries.values()]
+        self.__est = UaeRelationalEstimator(self._known(), dataset, train_queries)
 
         k = len(known_queries)
         known_queries_pos = [i for i in known_queries.keys()]
@@ -269,8 +272,11 @@ class UaeScoringAttack(ScoringAttack):
         coocc_s_kw = np.zeros((len(self._known_keywords), k))
         for i in range(len(self._known_keywords)):
             for j in range(k):
-                coocc_s_kw[i][j] = self.__calculate_known_cooc(self._known_keywords[i],
+                est_sel = self.__calculate_known_cooc(self._known_keywords[i],
                                                                known_queries[known_queries_pos[j]])
+                act_sel = cooc_ext.co_occurrence(self._known_keywords[i],
+                                                               known_queries[known_queries_pos[j]])
+                coocc_s_kw[i][j] = est_sel
 
         for i, _ in enumerate(queries):
             if i not in known_queries:
@@ -385,6 +391,10 @@ class SamplingScoringAttack(ScoringAttack):
         log.info(f"Running {self.name()}")
         queries = list(queries)
         coocc = self.required_leakage()[0](dataset, queries)
+        full_cooc_ext = dataset.get_extension(CoOccurrenceExtension)
+
+        errors = []
+        errors_without_zero_one = []
 
         known_queries = self._get_known_queries(dataset, queries)
 
@@ -399,8 +409,17 @@ class SamplingScoringAttack(ScoringAttack):
         coocc_s_kw = np.zeros((len(self._known_keywords), k))
         for i in range(len(self._known_keywords)):
             for j in range(k):
-                coocc_s_kw[i][j] = self.__calculate_known_cooc(self._known_keywords[i],
+                est_cooc = self.__calculate_known_cooc(self._known_keywords[i],
                                                                known_queries[known_queries_pos[j]])
+                act_cooc = full_cooc_ext.co_occurrence(self._known_keywords[i],
+                                                               known_queries[known_queries_pos[j]])
+                #act_cooc2 = len([r for r in dataset.query(self._known_keywords[i])
+                #                 if r in dataset.query(known_queries[known_queries_pos[j]])])
+                #assert act_cooc == act_cooc2
+                errors.append(ErrorMetric(est_cooc, act_cooc))
+                if not (est_cooc==0 and act_cooc==1) and not (est_cooc==1 and act_cooc==0):
+                    errors_without_zero_one.append(ErrorMetric(est_cooc, act_cooc))
+                coocc_s_kw[i][j] = est_cooc
 
         for i, _ in enumerate(queries):
             if i not in known_queries:
@@ -416,6 +435,12 @@ class SamplingScoringAttack(ScoringAttack):
                 uncovered.append("")
 
         log.info(f"Reconstruction completed.")
+
+        log.info("MEDIAN ERRORS")
+        #log.info(errors)
+        log.info(((np.median(errors), np.quantile(errors, 0.95), np.quantile(errors, .99), np.max(errors)),
+                  (np.median(errors_without_zero_one), np.quantile(errors_without_zero_one, 0.95),
+                   np.quantile(errors_without_zero_one, .99), np.max(errors_without_zero_one))))
 
         return uncovered
 
