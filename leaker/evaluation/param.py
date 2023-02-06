@@ -230,14 +230,23 @@ class KnownDatasetSampler(DatasetSampler):
     monotonic : bool
         whether to apply monotonic sampling as described above
         default: False
+    table_samples : Iterable[Union[str, int]]
+        For relational evaluations: The names or identifiers of tables that should not be sampled, i.e., are known to
+        the adversary in full.
     """
     __kdr_samples: Iterable[float]
     __sample_monotonic: bool
 
-    def __init__(self, kdr_samples: Iterable[float], reuse: bool = False, monotonic: bool = False):
-        super().__init__(kdr_samples,reuse,monotonic)
+    def __init__(self, kdr_samples: Iterable[float], reuse: bool = False, monotonic: bool = False,
+                 table_samples: Iterable[Union[str, int]] = None):
+        super().__init__(kdr_samples, reuse, monotonic, table_samples)
         self.__sample_monotonic = monotonic
         self.__kdr_samples = kdr_samples
+
+        self.__kdr_samples = kdr_samples
+        self.__table_samples = table_samples
+
+        self.__sample_cache = dict()
 
     def create_samples(self, dataset: Dataset, pool: Optional[Pool]) -> Iterator[Tuple[float, Dataset]]:
         sorted_samples = sorted(self.__kdr_samples, reverse=True)

@@ -327,6 +327,9 @@ class SQLRelationalDatabase(RelationalDatabase):
 
         return SampledSQLRelationalDatabase(self, rate, sampled_table_row_ids)
 
+    def sample_test_training(self, rate: float) -> 'SQLRelationalDatabase':
+        raise NotImplementedError
+
     def sample_rate(self) -> float:
         return 1
 
