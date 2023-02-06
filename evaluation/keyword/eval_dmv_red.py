@@ -11,7 +11,9 @@ from leaker.api import Dataset, Selectivity
 from leaker.attack import PartialQuerySpace, Countv2, NaruCount, ScoringAttack, NaruScoringAttack, RefinedScoringAttack, \
     NaruRefinedScoringAttack, Ikk
 from leaker.attack.sap import Sap, RelationalSap, NaruRelationalSap, NaruRelationalSapFast
-from leaker.evaluation import DatasetSampler, EvaluationCase, QuerySelector, RelationalAttackEvaluator
+from leaker.attack.scoring import SamplingScoringAttack, SamplingRefinedScoringAttack
+from leaker.evaluation import EvaluationCase, QuerySelector, RelationalAttackEvaluator, \
+    KnownDatasetSampler
 from leaker.extension import SelectivityExtension
 from leaker.plotting import KeywordMatPlotLibSink
 from leaker.sql_interface import SQLBackend
@@ -37,8 +39,8 @@ dmv_db.extend_with(SelectivityExtension)
 
 log.info(f"Loaded {dmv_db.name()} data. {len(dmv_db)} documents with {len(dmv_db.keywords())} words. {dmv_db.has_extension(SelectivityExtension)}")
 
-attacks = [ScoringAttack, NaruScoringAttack, RefinedScoringAttack, NaruRefinedScoringAttack]  # the attacks to evaluate
-runs = 5  # Amount of evaluations
+attacks = [SamplingScoringAttack, SamplingRefinedScoringAttack]  # the attacks to evaluate
+runs = 3  # Amount of evaluations
 
 # From this, we can construct a simple EvaluationCase:
 evaluation_case = EvaluationCase(attacks=attacks, dataset=dmv_db, runs=runs)
@@ -46,7 +48,7 @@ evaluation_case = EvaluationCase(attacks=attacks, dataset=dmv_db, runs=runs)
 kdr = [.005, .01, .05, .1, .2, .4, .6, .8]  # known data rates
 reuse = True  # If we reuse sampled datasets a number of times (=> we will have a 5x5 evaluation here)
 # From this, we can construct a DatasetSampler:
-dataset_sampler = DatasetSampler(kdr_samples=kdr, reuse=reuse)
+dataset_sampler = KnownDatasetSampler(kdr_samples=kdr, reuse=reuse)
 
 query_space = PartialQuerySpace  # The query space to populate. Here, we use partial sampling from
 # the data collection. With a query log, a QueryLogSpace is used.
@@ -58,7 +60,7 @@ allow_repetition = False  # If queries can repeat
 query_selector = QuerySelector(query_space=query_space, selectivity=sel, query_space_size=qsp_size, queries=sample_size,
                                allow_repetition=allow_repetition)
 
-out_file = "scoring_dmv_10k_11cols_500_150(3xpseudoLowTwo)_est1-0.005.png"  # Output file (if desired), will be stored in data/figures
+out_file = "scoring_dmv_10k_11cols_500_150(3xHigh).png"  # Output file (if desired), will be stored in data/figures
 
 # With these parameters, we can set up the Evaluator:
 eva = RelationalAttackEvaluator(evaluation_case=evaluation_case, dataset_sampler=dataset_sampler,
