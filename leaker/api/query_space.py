@@ -50,6 +50,7 @@ class QuerySpace(ABC, Collection):
 class KeywordQuerySpace(QuerySpace):
     __space: List[Set[Tuple[str, int]]]
     __allow_repetition: bool
+    __query_log: KeywordQueryLog
 
     def __init__(self, full: Dataset, known: Dataset, selectivity: Selectivity, size: int,
                  query_log: KeywordQueryLog = None,
@@ -73,7 +74,7 @@ class KeywordQuerySpace(QuerySpace):
             whether repetitions are allowed when drawing query sequences
         """
         self.__space: List[Set[Tuple[str, int]]] = []
-
+        self.__query_log = query_log
         for i, candidate_keywords in enumerate(self._candidates(full, known, query_log)):
             if len(candidate_keywords) < size:
                 log.warning(f"Set of candidate keywords with length {len(candidate_keywords)} at position {i} smaller "
@@ -135,7 +136,10 @@ class KeywordQuerySpace(QuerySpace):
     def _get_space(self) -> Iterator[Set[Tuple[str, int]]]:
         yield from self.__space
 
-    def select(self, n: int) -> Iterator[List[str]]:
+    def _get_log(self) -> KeywordQueryLog:
+        return self.__query_log
+
+    def select(self, n: int, *args, **kwargs) -> Iterator[List[str]]:
         """
         Selects a query sequence of the desired length.
 

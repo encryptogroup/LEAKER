@@ -170,8 +170,76 @@ class DatasetSampler:
 
         self.__sample_cache = dict()
 
-    def __sample(self, dataset: Union[Dataset, RelationalDatabase], pool: Optional[Pool]) \
-            -> Iterator[Tuple[float, Dataset]]:
+    def create_samples(self, dataset: Dataset, pool: Optional[Pool]) -> Iterator[Tuple[float, Dataset]]:
+        raise NotImplementedError
+
+    def sample(self, datasets: Iterable[Dataset], pool: Optional[Pool] = None) \
+            -> Iterator[Tuple[Dataset, float, Dataset]]:
+        """
+        Yields sub samples of the given data set for the configured known data rates.
+
+        Parameters
+        ----------
+        datasets : Iterable[Dataset]
+            the data sets to sample from
+        pool : Optional[Pool]
+            the thread pool for parallel processing if activated for the evaluation
+        """
+        if not self.__reuse or len(self.__sample_cache) == 0:
+            for dataset in datasets:
+                log.info(f"Sampling dataset '{dataset.name()}' to configured known data rates")
+                for kdr, sampled in self.create_samples(dataset, pool):
+                    if isinstance(sampled,tuple):
+                        training_set, test_set = sampled
+                        if self.__reuse:
+                            self.__sample_cache[(test_set, kdr)] = training_set
+
+                        yield test_set, kdr, training_set
+
+                    else:
+                        if self.__reuse:
+                            self.__sample_cache[(dataset, kdr)] = sampled
+
+                        yield dataset, kdr, sampled
+        else:
+            log.info("Reusing sampled datasets, no sampling necessary")
+            yield from [(key[0], key[1], sampled) for key, sampled in self.__sample_cache.items()]
+
+    def reuse(self) -> bool:
+        return self.__reuse
+
+    def set_reuse(self, reuse: bool) -> None:
+        """Sets reuse and removes the prior sample cache"""
+        self.__reuse = reuse
+        self.__sample_cache = dict()
+
+
+class KnownDatasetSampler(DatasetSampler):
+    """
+    A tool to provide sampled data sets for evaluation. It samples data sets for the specified known data rate values
+    and may reuse already sampled datasets or use monotonic sampling, i.e. sample data sets such that for each pair
+    d1, d2 of sampled data sets if kdr1 < kdr2, then d1 is a subset of d2.
+
+    Parameters
+    ----------
+    kdr_samples: Iterable[float]
+        the known data rate values to sample the dataset to
+    reuse : bool
+        whether to only sample once for each run (False) or to sample #runs times new queries for each run (True)
+        default: False
+    monotonic : bool
+        whether to apply monotonic sampling as described above
+        default: False
+    """
+    __kdr_samples: Iterable[float]
+    __sample_monotonic: bool
+
+    def __init__(self, kdr_samples: Iterable[float], reuse: bool = False, monotonic: bool = False):
+        super().__init__(kdr_samples,reuse,monotonic)
+        self.__sample_monotonic = monotonic
+        self.__kdr_samples = kdr_samples
+
+    def create_samples(self, dataset: Dataset, pool: Optional[Pool]) -> Iterator[Tuple[float, Dataset]]:
         sorted_samples = sorted(self.__kdr_samples, reverse=True)
         prev: Union[Dataset, RelationalDatabase] = dataset
 
@@ -197,37 +265,49 @@ class DatasetSampler:
                 yield from iter(pool.starmap(func=lambda rate: (rate, dataset.sample(rate)),
                                              iterable=map(lambda rate: (rate,), sorted_samples)))
 
-    def sample(self, datasets: Iterable[Dataset], pool: Optional[Pool] = None) \
-            -> Iterator[Tuple[Dataset, float, Dataset]]:
-        """
-        Yields sub samples of the given data set for the configured known data rates.
 
-        Parameters
-        ----------
-        datasets : Iterable[Dataset]
-            the data sets to sample from
-        pool : Optional[Pool]
-            the thread pool for parallel processing if activated for the evaluation
-        """
-        if not self.__reuse or len(self.__sample_cache) == 0:
-            for dataset in datasets:
-                log.info(f"Sampling dataset '{dataset.name()}' to configured known data rates")
-                for kdr, sampled in self.__sample(dataset, pool):
-                    if self.__reuse:
-                        self.__sample_cache[(dataset, kdr)] = sampled
+class SampledDatasetSampler(DatasetSampler):
+    """
+    A tool to provide sampled data sets for evaluation. It samples data sets for the specified known data rate values
+    and may reuse already sampled datasets or use monotonic sampling, i.e. sample data sets such that for each pair
+    d1, d2 of sampled data sets if kdr1 < kdr2, then d1 is a subset of d2.
 
-                    yield dataset, kdr, sampled
+    Parameters
+    ----------
+    kdr_samples: Iterable[float]
+        the known data rate values to sample the dataset to
+    reuse : bool
+        whether to only sample once for each run (False) or to sample #runs times new queries for each run (True)
+        default: False
+    monotonic : bool
+        whether to apply monotonic sampling as described above
+        default: False
+    """
+    __kdr_samples: Iterable[float]
+    __training_set: Dataset = None
+
+    def __init__(self, kdr_samples: Iterable[float] = [0], reuse: bool = False, monotonic: bool = False, training_set: Dataset = None):
+        super().__init__(kdr_samples,reuse,monotonic)
+        self.__kdr_samples = kdr_samples
+        if training_set:
+            self.__training_set = training_set
+
+
+    def create_samples(self, dataset: Dataset, pool: Optional[Pool]) -> Iterator[Tuple[float, Dataset]]:
+        # TODO: not compatible with relational setting
+        if self.__training_set:
+            sampled = (self.__training_set, dataset)
+            yield 0, sampled
         else:
-            log.info("Reusing sampled datasets, no sampling necessary")
-            yield from [(key[0], key[1], sampled) for key, sampled in self.__sample_cache.items()]
+            sorted_samples = sorted(self.__kdr_samples, reverse=True)
 
-    def reuse(self) -> bool:
-        return self.__reuse
-
-    def set_reuse(self, reuse: bool) -> None:
-        """Sets reuse and removes the prior sample cache"""
-        self.__reuse = reuse
-        self.__sample_cache = dict()
+            if pool is None:
+                for kdr in sorted_samples:
+                    sampled = dataset.sample_test_training(kdr)
+                    yield kdr, sampled
+            else:
+                yield from iter(pool.starmap(func=lambda rate: (rate, dataset.sample_test_training(rate)),
+                                            iterable=map(lambda rate: (rate,), sorted_samples)))
 
 
 class QuerySelector:

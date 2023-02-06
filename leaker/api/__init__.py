@@ -1,6 +1,6 @@
 from .attack import Attack, AttackDefinition, KeywordAttack, RangeAttack, RelationalAttack
 from .backend import Backend
-from .dataset import Dataset, Extension, KeywordQueryLog, Data
+from .dataset import Dataset, Extension, KeywordQueryLog, DummyKeywordQueryLogFromTrends, Data
 from .document import Document, InputDocument, QueryInputDocument
 from .leakage_pattern import LeakagePattern
 from .query_space import QuerySpace, KeywordQuerySpace, RangeQuerySpace
@@ -16,7 +16,7 @@ __all__ = [
 
     'Backend',  # backend.py
 
-    'Data', 'Dataset', 'Extension', 'KeywordQueryLog',  # dataset.py
+    'Data', 'Dataset', 'Extension', 'KeywordQueryLog', 'DummyKeywordQueryLogFromTrends', # dataset.py
 
     'RangeDatabase', 'RandomRangeDatabase', 'RegularRangeDatabase', 'QDRangeDatabase', 'BaseRangeDatabase',
     'PermutedBetaRandomRangeDatabase', 'BTRangeDatabase', 'ABTRangeDatabase', 'RangeQueryLog',  # range_database.py

@@ -14,4 +14,5 @@
 /leaker/pq-trees/set_methods.h
 /leaker/pq-trees/build/
 /leaker/pq-trees/pq-trees/
-
+leaker.egg-info
+/data_sources/

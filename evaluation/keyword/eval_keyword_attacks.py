@@ -12,7 +12,7 @@ import numpy as np
 from leaker.api import Dataset, Selectivity
 from leaker.attack import PartialUserQueryLogSpace, FullUserQueryLogSpace, Ikk, Countv2, VolAn, SelVolAn, SubgraphID, \
     SubgraphVL, Ikkoptimized, PartialQueryLogSpace, FullQueryLogSpace
-from leaker.evaluation import KeywordAttackEvaluator, EvaluationCase, DatasetSampler, QuerySelector
+from leaker.evaluation import KeywordAttackEvaluator, EvaluationCase, KnownDatasetSampler, QuerySelector
 from leaker.plotting import KeywordMatPlotLibSink
 from leaker.whoosh_interface import WhooshBackend
 
@@ -87,7 +87,7 @@ for ql_str, db_str in [("aol", "wikipedia"), ("tair_ql", "tair_db")]:
                                                                                   SubgraphID.definition(epsilon=13),
                                                                                   SubgraphVL.definition(epsilon=7)],
                                                                          dataset=db, runs=5),
-                                          dataset_sampler=DatasetSampler(
+                                          dataset_sampler=KnownDatasetSampler(
                                               kdr_samples=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1], reuse=True,
                                               monotonic=False),
                                           query_selector=QuerySelector(query_space=qsp,

@@ -532,6 +532,20 @@ class EMailParser(FileParser):
             return True
         elif "[IMAGE]" in line:
             return True
+        elif match(r"^http[s]*://.*.ubuntu.com.*$", line) is not None:
+            return True
+        elif match(r"^Ubuntu Security Notice", line) is not None:
+            return True
+        elif match(r"^http[s]*://.*.debian.org.*$", line) is not None:
+            return True
+        elif match(r"^Debian Security Advisory",line) is not None:
+            return True
+        elif "MD5 checksum" in line or "MD5Dum" in line:
+            return True
+        elif match(r"^\w{3,9}?\s\d{1,2}?,\s\d{4}?",line) is not None:
+            return True
+        elif "=====" in line:
+            return True
         return False
 
     def parse(self, f: TextIO) -> Iterator[Tuple[str, str, str]]:
@@ -574,6 +588,92 @@ class GoogleLogParser(JSONParser):
                 yield (dictionary[self._id_attribute].strip(), re.sub(r'^Searched for ', '',
                                                                       dictionary[self._content_attribute]),
                        payload)
+
+
+class UbuntuMailParser(EMailParser):
+    """
+    A parser for .mbox  and .txt e-mail files aiming at excluding e-mail headers, e-mail addresses and placeholders inserted for
+    images.
+    """
+
+    def parse(self, f: TextIO) -> Iterator[Tuple[str, str, str]]:
+        m: str = ""
+        i: int = 0
+        skip = False
+        for l in f:
+            #print(l)
+            if re.match(r"^\s*Source archives:$",l) or re.match(r"^-------------- next part --------------$",l) or re.match(r"^Update instructions:$",l):
+                skip = True
+            if re.match(r"^From .*\sat\s.*$", l):
+                """New email"""
+                skip = False
+                mail = email.message_from_string(m)
+                payload: str = ""
+                if mail.is_multipart():
+                    for part in mail.walk():
+                        content_type = part.get_content_type()
+                        content_disposition = str(part.get('Content-Disposition'))
+
+                        # skip any text/plain (txt) attachments
+                        if content_type == 'text/plain' and 'attachment' not in content_disposition:
+                            payload = UbuntuMailParser._payload_to_string(part.get_payload(decode=True))  # decode
+                            break
+                # not multipart - i.e. plain text, no attachments, keeping fingers crossed
+                else:
+                    payload = UbuntuMailParser._payload_to_string(mail.get_payload(decode=True))
+
+                i += 1
+                m = ""
+                yield (str(i),
+                       " ".join([line for line in payload.split("\n") if not UbuntuMailParser._filtered(line.strip())]), "")
+            elif skip:
+                continue
+            else:
+                """Line belongs to prior email"""
+                m += l
+
+class DebianMailParser(EMailParser):
+    """
+    A parser for .mbox and .txt e-mail files aiming at excluding e-mail headers, e-mail addresses and placeholders inserted for
+    images.
+    """
+
+    def parse(self, f: TextIO) -> Iterator[Tuple[str, str, str]]:
+        m: str = ""
+        i: int = 0
+        skip = False
+        f = iter(f)
+        for l in f:
+            if (re.match(r"^Debian GNU/Linux",l) and "-------" in next(f)) or re.match(r"^-----BEGIN PGP SIGNATURE-----$",l) or re.match(r"^Upgrade Instructions$",l):
+                skip = True
+
+            if re.match(r"^-----BEGIN PGP SIGNED MESSAGE-----$", l):
+                """New email"""
+                skip = False
+                mail = email.message_from_string(m)
+                payload: str = ""
+                if mail.is_multipart():
+                    for part in mail.walk():
+                        content_type = part.get_content_type()
+                        content_disposition = str(part.get('Content-Disposition'))
+
+                        # skip any text/plain (txt) attachments
+                        if content_type == 'text/plain' and 'attachment' not in content_disposition:
+                            payload = DebianMailParser._payload_to_string(part.get_payload(decode=True))  # decode
+                            break
+                # not multipart - i.e. plain text, no attachments, keeping fingers crossed
+                else:
+                    payload = DebianMailParser._payload_to_string(mail.get_payload(decode=True))
+
+                i += 1
+                m = ""
+                yield (str(i),
+                       " ".join([line for line in payload.split("\n") if not DebianMailParser._filtered(line.strip())]), "")
+            elif skip:
+                continue
+            else:
+                """Line belongs to prior email"""
+                m += l
 
 
 class GMailParser(EMailParser):
