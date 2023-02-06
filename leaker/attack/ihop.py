@@ -1,5 +1,4 @@
 """Some Code in this file has been adapted from https://github.com/simon-oya/USENIX22-ihop-code"""
-from calendar import week
 from logging import getLogger
 from typing import Iterable, List, Any, Dict, Set, TypeVar, Type, Union
 
@@ -7,13 +6,9 @@ import numpy as np
 from collections import Counter
 from scipy.optimize import linear_sum_assignment as hungarian
 
-from leaker.extension import identity
-
 from ..api import Extension, KeywordAttack, Dataset, LeakagePattern, KeywordQueryLog
-from ..extension import VolumeExtension, CoOccurrenceExtension, IdentityExtension
-from ..pattern import ResponseLength, TotalVolume, Frequency, ResponseIdentity, CoOccurrence
-from math import ceil
-import random
+from ..extension import CoOccurrenceExtension, IdentityExtension
+from ..pattern import ResponseLength, Frequency, ResponseIdentity, CoOccurrence
 
 log = getLogger(__name__)
 
@@ -110,7 +105,11 @@ def get_Vexp(dataset:Dataset, ids, chosen_keywords):
     doc_map = {}
     i = 0
     for doc in dataset.documents():
-        doc_map[doc.id()] = i
+        if isinstance(doc, tuple):
+            # relational case
+            doc_map[doc[1]] = i
+        else:
+            doc_map[doc.id()] = i
         i += 1
     binary_database_matrix = np.zeros((ndocs, nkw))
     for keyword in keywords:
@@ -119,7 +118,11 @@ def get_Vexp(dataset:Dataset, ids, chosen_keywords):
             i_kw = chosen_keywords.index(keyword)
             for doc in resp:
                 try:
-                    binary_database_matrix[doc_map[doc], i_kw] = 1
+                    if isinstance(doc, tuple):
+                        # relational case
+                        binary_database_matrix[doc_map[doc[1]], i_kw] = 1
+                    else:
+                        binary_database_matrix[doc_map[doc], i_kw] = 1
                 except IndexError as e:
                     log.warning(e)
     epsilon = 1e-20  # Value to control that there are no zero elements
@@ -162,10 +165,10 @@ class Ihop(KeywordAttack):
         self._known_keywords = dict()
         self._niters = niters
         self._pct_free =  pct_free
-        if not known.has_extension(VolumeExtension):
-            known.extend_with(VolumeExtension)
+        #if not known.has_extension(VolumeExtension):
+        #    known.extend_with(VolumeExtension)
 
-        vol = known.get_extension(VolumeExtension)
+        #vol = known.get_extension(VolumeExtension)
 
         if not known.has_extension(IdentityExtension):
             known.extend_with(IdentityExtension)
@@ -196,8 +199,8 @@ class Ihop(KeywordAttack):
             self._known_keywords[i] = keyword
             self._known_keywords[keyword] = i
             i += 1
-            self._known_volume[keyword] = vol.total_volume(keyword)
-            self._known_response_length[keyword] = vol.selectivity(keyword)
+            #self._known_volume[keyword] = vol.total_volume(keyword)
+            #self._known_response_length[keyword] = vol.selectivity(keyword)
             self._known_ids[keyword] = ide.doc_ids(keyword)
 
         self._nkw = len(self._chosen_keywords)
@@ -212,7 +215,8 @@ class Ihop(KeywordAttack):
 
     @classmethod
     def required_extensions(cls) -> Set[Type[E]]:
-        return {VolumeExtension, CoOccurrenceExtension}
+        #return {VolumeExtension, CoOccurrenceExtension}
+        return {IdentityExtension, CoOccurrenceExtension}
     
     def get_update_coefficients_functions(self,token_trace, token_info, ndocs):
         def _build_cost_Vol_some_fixed(free_keywords, free_tags, fixed_keywords, fixed_tags):
