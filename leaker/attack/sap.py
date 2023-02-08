@@ -9,7 +9,8 @@ from collections import Counter
 from scipy.optimize import linear_sum_assignment as hungarian
 
 from leaker.extension import identity
-from .relational_estimators.estimator import NaruRelationalEstimator, SamplingRelationalEstimator, RelationalEstimator
+from .relational_estimators.estimator import NaruRelationalEstimator, SamplingRelationalEstimator, RelationalEstimator, \
+    KDERelationalEstimator, PerfectRelationalEstimator
 from .relational_estimators.eval import ErrorMetric
 from ..api import Extension, KeywordAttack, Dataset, LeakagePattern, RelationalDatabase, RelationalQuery, KeywordQueryLog
 from ..extension import VolumeExtension, SelectivityExtension, IdentityExtension
@@ -57,6 +58,7 @@ def compute_frequencies(ql:KeywordQueryLog):
     chosen_keywords = [kw for kw, _ in kw_counter]
     frequencies = np.array([count for _, count in kw_counter])[:,None]/sum(count for _, count in kw_counter)
     return frequencies, chosen_keywords
+
 
 class Sap(KeywordAttack):
     """
@@ -234,20 +236,38 @@ class RelationalSap(KeywordAttack):
     _known_response_length: Dict[str, int]
     _known_keywords: Dict
     _delta: float
+    _full_id_extension: IdentityExtension
+    _id_extension: IdentityExtension
+    _full_size: int
 
     def __init__(self, known: SQLRelationalDatabase):
         super(RelationalSap, self).__init__(known)
 
         if not known.has_extension(IdentityExtension):
             known.extend_with(IdentityExtension)
-        id_extension = known.get_extension(IdentityExtension)
-        full_id_extension = known.parent().get_extension(IdentityExtension)
+
+        if isinstance(known, SampledSQLRelationalDatabase):
+            full = known.parent()
+        else:
+            # dataset is not sampled, therefore whole dataset is known
+            full = known
+
+        self.id_extension = known.get_extension(IdentityExtension)
+        self.full_id_extension = full.get_extension(IdentityExtension)
+        self._full_size = len(full.row_ids())
 
         self._delta = known.sample_rate()
 
         self._known_response_length = dict()
         self._known_keywords = dict()
 
+        self._perform_estimation(self._get_estimator(known, full), known)
+
+    def _get_estimator(self, known, full) -> RelationalEstimator:
+        # estimator that returns rlen (based on full dataset size)
+        return SamplingRelationalEstimator(known, full)
+
+    def _perform_estimation(self, estimator: RelationalEstimator, known: SQLRelationalDatabase):
         errors = []
         errors_without_zero_one = []
 
@@ -256,17 +276,21 @@ class RelationalSap(KeywordAttack):
             self._known_keywords[i] = keyword
             self._known_keywords[keyword] = i
             i += 1
-            est_rlen = len(id_extension.doc_ids(keyword))
-            act_rlen = len(full_id_extension.doc_ids(keyword))
+            est_rlen = round(estimator.estimate(keyword))
+            self._known_response_length[keyword] = est_rlen
+
+            act_rlen = len(self.full_id_extension.doc_ids(keyword))
             errors.append(ErrorMetric(est_rlen, act_rlen))
             if not (est_rlen == 0 and act_rlen == 1) and not (est_rlen == 1 and act_rlen == 0):
                 errors_without_zero_one.append(ErrorMetric(est_rlen, act_rlen))
 
-            self._known_response_length[keyword] = len(id_extension.doc_ids(keyword))
-
-        log.info(((np.median(errors), np.quantile(errors, 0.95), np.quantile(errors, .99), np.max(errors)),
-                  (np.median(errors_without_zero_one), np.quantile(errors_without_zero_one, 0.95),
-                   np.quantile(errors_without_zero_one, .99), np.max(errors_without_zero_one))))
+        import csv
+        with open('error_logs/' + self.name() + '.csv', 'a') as fd:
+            row = [np.median(errors), np.quantile(errors, 0.95), np.quantile(errors, .99), np.max(errors),
+                   np.median(errors_without_zero_one), np.quantile(errors_without_zero_one, 0.95),
+                   np.quantile(errors_without_zero_one, .99), np.max(errors_without_zero_one)]
+            writer = csv.writer(fd)
+            writer.writerow(row)
 
     @classmethod
     def name(cls) -> str:
@@ -281,8 +305,8 @@ class RelationalSap(KeywordAttack):
         return {IdentityExtension}
 
     def _build_cost_rlen(self, n: int, rlens: List[int]):
-
-        kw_probs_train = [self._known_response_length[self._known_keywords[i]] / len(self._known().doc_ids())
+        # estimation is always scaled to full size, therefore we normalize here by the full size (n)
+        kw_probs_train = [self._known_response_length[self._known_keywords[i]] / n
                           for i in range(len(self._known().keywords()))]
         log_prob_matrix = compute_log_binomial_probability_matrix(n, kw_probs_train, rlens)
         cost_vol = - log_prob_matrix
@@ -306,187 +330,40 @@ class RelationalSap(KeywordAttack):
         return res
 
 
-class PerfectRelationalSap(KeywordAttack):
+class PerfectRelationalSap(RelationalSap):
     """
     Implements the SAP attack from Oya & Kerschbaum for relational data using only ResponseLength patterns (no volume patterns).
     Uses perfect estimates for rlen.
     """
-    _known_response_length: Dict[str, int]
-    _known_keywords: Dict
-    _delta: float
-    _full_size: int
 
     def __init__(self, known: SQLRelationalDatabase):
         super(PerfectRelationalSap, self).__init__(known)
 
-        if not known.has_extension(IdentityExtension):
-            known.extend_with(IdentityExtension)
-        #id_extension = known.get_extension(IdentityExtension)
-        full_id_extension = known.parent().get_extension(IdentityExtension)
-        self._full_size = len(known.parent().doc_ids())
-
-        self._delta = known.sample_rate()
-
-        self._known_response_length = dict()
-        self._known_keywords = dict()
-
-        i = 0
-        for keyword in known.keywords():
-            self._known_keywords[i] = keyword
-            self._known_keywords[keyword] = i
-            i += 1
-            self._known_response_length[keyword] = len(full_id_extension.doc_ids(keyword))
+    def _get_estimator(self, known, full) -> RelationalEstimator:
+        # estimator that returns rlen (based on full dataset size)
+        return PerfectRelationalEstimator(known, full)
 
     @classmethod
     def name(cls) -> str:
         return "Perfect-Relational-SAP"
-
-    @classmethod
-    def required_leakage(cls) -> List[LeakagePattern[Any]]:
-        return [ResponseLength()]
-
-    @classmethod
-    def required_extensions(cls) -> Set[Type[E]]:
-        return {IdentityExtension}
-
-    def _build_cost_rlen(self, n: int, rlens: List[int]):
-
-        kw_probs_train = [self._known_response_length[self._known_keywords[i]] / self._full_size
-                          for i in range(len(self._known().keywords()))]
-        log_prob_matrix = compute_log_binomial_probability_matrix(n, kw_probs_train, rlens)
-        cost_vol = - log_prob_matrix
-        return cost_vol
-
-    def recover(self, dataset: Dataset, queries: Iterable[RelationalQuery]) -> List[str]:
-        log.info(f"Running {self.name()} at {self._delta:.3f}")
-        queries = list(queries)
-        leakage = list(self.required_leakage()[0](dataset, queries))
-
-        rlen_cost = self._build_cost_rlen(len(dataset.doc_ids()), rlens=[l for l in leakage])
-        total_cost = rlen_cost
-
-        row_ind, col_ind = hungarian(total_cost)
-
-        res = ["" for _ in range(len(leakage))]
-
-        for i, j in zip(col_ind, row_ind):
-            res[i] = self._known_keywords[j]
-
-        return res
 
 
 class NaruRelationalSap(RelationalSap):
     """
     Implements the SAP attack from Oya & Kerschbaum for relational data using only ResponseLength patterns and the naru estimator
     """
-    _known_response_length: Dict[str, int]
-    _known_keywords: Dict
-    _delta: float
-    __est: NaruRelationalEstimator
-    __est_sampling: SamplingRelationalEstimator
-
-    ''' Set estimation lower limit absolute (e.g. 2 to skip sampling in 1 case) and upper limit relative (e.g. 0.5% as 
-        in naru paper). Upper absolute limit will then be calculated based on the number of rows in the full dataset. '''
-    __estimation_lower_limit = 0
-    __estimation_upper_limit_relative = 1
-    __estimation_upper_limit: int
 
     def __init__(self, known: SQLRelationalDatabase):
         """
         known : should be a SampledSQLRelationalDatabase object
                 otherwise known dataset is assumed to be the full dataset
         """
-        if not isinstance(known, SampledSQLRelationalDatabase):
-            raise ValueError('Known dataset need to be of instance SampledSQLRelationalDatabase')
-
         super().__init__(known)
 
-        if isinstance(known, SampledSQLRelationalDatabase):
-            full = known.parent()
-        else:
-            # dataset is not sampled, therefore whole dataset is known
-            full = known
-
-        self.__est = NaruRelationalEstimator(sample=known, full=full)
-        self.__est_sampling = SamplingRelationalEstimator(known, full)
-        self.__estimation_upper_limit = round(len(known.parent().queries()) * self.__estimation_upper_limit_relative)
-
-        log.debug('Start estimating known queries. This might take a while...')
-        self._known_response_length = self._perform_estimation(self.__est, self.__est_sampling, known)
-        log.debug('Finished estimating known queries')
+    def _get_estimator(self, known, full) -> RelationalEstimator:
+        # estimator that returns rlen (based on full dataset size)
+        return NaruRelationalEstimator(known, full)
 
     @classmethod
     def name(cls) -> str:
         return "Naru-SAP"
-
-    def _perform_estimation(self, estimator: RelationalEstimator,
-                            sampling_estimator: Optional[SamplingRelationalEstimator], known: SQLRelationalDatabase) \
-            -> Dict[str, int]:
-        """ Estimate rlen for all known queries.
-        If sampled rlen is between lower and upper limit, then use naru estimator """
-
-        known_response_length: Dict[str, int] = dict()
-        for keyword in known.keywords():
-            sampled_rlen = round(self.__est_sampling.estimate(keyword))
-            if self.__estimation_lower_limit <= sampled_rlen <= self.__estimation_upper_limit:
-                known_response_length[keyword] = round(estimator.estimate(keyword))
-            else:
-                known_response_length[keyword] = sampled_rlen
-        return known_response_length
-
-    def _build_cost_rlen(self, n: int, rlens: List[int]):
-
-        kw_probs_train = [self._known_response_length[self._known_keywords[i]] / len(self._known().parent().doc_ids())
-                          for i in range(len(self._known().keywords()))]
-        log_prob_matrix = compute_log_binomial_probability_matrix(n, kw_probs_train, rlens)
-        cost_vol = - log_prob_matrix
-        return cost_vol
-
-    def recover(self, dataset: Dataset, queries: Iterable[RelationalQuery]) -> List[str]:
-        log.info(f"Running {self.name()} at {self._delta:.3f}")
-        queries = list(queries)
-        leakage = list(self.required_leakage()[0](dataset, queries))
-
-        rlen_cost = self._build_cost_rlen(len(dataset.doc_ids()), rlens=[l for l in leakage])
-        total_cost = rlen_cost
-
-        row_ind, col_ind = hungarian(total_cost)
-
-        res = ["" for _ in range(len(leakage))]
-
-        for i, j in zip(col_ind, row_ind):
-            res[i] = self._known_keywords[j]
-
-        return res
-
-
-class NaruRelationalSapFast(NaruRelationalSap):
-    """
-    Adaption of NaruRelationalSap that uses basic sampling for queries with known rlen of 1 instead of naru estimation.
-    This can improve the setup runtime.
-    """
-
-    def __init__(self, known: SQLRelationalDatabase):
-        """
-        known : should be a SampledSQLRelationalDatabase object
-                otherwise known dataset is assumed to be the full dataset
-        """
-        super().__init__(known)
-
-    def _perform_estimation(self, naru_estimator: NaruRelationalEstimator,
-                            sampling_estimator: SamplingRelationalEstimator, known: SQLRelationalDatabase) \
-            -> Dict[str, int]:
-        """Perform estimation by sampling in case of known rlen is 1, otherwise use naru estimation"""
-        known_response_length: Dict[str, int] = dict()
-        for keyword in known.keywords():
-            if self._known_response_length[keyword] != 1:
-                # if known rlen is not 1, use naru estimation
-                known_response_length[keyword] = int(naru_estimator.estimate(keyword))
-            else:
-                # if known rlen is 1, use sampling
-                known_response_length[keyword] = int(sampling_estimator.estimate(keyword))
-        return known_response_length
-
-    @classmethod
-    def name(cls) -> str:
-        return "Naru-SAP-fast"

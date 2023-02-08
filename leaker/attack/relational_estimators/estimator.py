@@ -43,7 +43,7 @@ class RelationalEstimator(ABC):
 
     @abstractmethod
     def estimate(self, kw: RelationalKeyword, kw2: Optional[RelationalKeyword] = None) -> float:
-        """Uses the trained model to estimate the selectivity/relative cardinality of kw on the full dataset
+        """Uses the trained model to estimate the cardinality of kw on the full dataset
         based on the sample provided at training time."""
         raise NotImplementedError
 
@@ -307,3 +307,28 @@ class SamplingRelationalEstimator(RelationalEstimator):
             scale_factor = self._full_cardinality[kw.table] / self._sample_cardinality[kw.table]
             return rlen_sample * scale_factor
 
+
+class PerfectRelationalEstimator(RelationalEstimator):
+    """
+        Gives best possible estimate (uses full dataset)
+    """
+    _full_cooc_ext: CoOccurrenceExtension
+
+    def __init__(self, sample: RelationalDatabase, full: RelationalDatabase):
+        super().__init__(sample, full)
+
+        if not full.has_extension(CoOccurrenceExtension):
+            full.extend_with(CoOccurrenceExtension)
+
+        self._full_cooc_ext = full.get_extension(CoOccurrenceExtension)
+
+        self._train()
+
+    def _train(self) -> None:
+        pass
+
+    def estimate(self, kw: RelationalKeyword, kw2: Optional[RelationalKeyword] = None) -> float:
+        if kw2 is None:
+            return self._full.selectivity(kw)
+        else:
+            return self._full_cooc_ext.co_occurrence(kw, kw2)
