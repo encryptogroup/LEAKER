@@ -101,7 +101,7 @@ class AttackDefinition(ABC, Generic[T]):
         """
         return self.__cls.name()
 
-    def create(self, db: Union[Dataset, RangeDatabase]) -> T:
+    def create(self, db: Union[Dataset, RangeDatabase], *args) -> T:
         """
         Creates a concrete instance of the described attack by using the given data set.
 
@@ -115,7 +115,7 @@ class AttackDefinition(ABC, Generic[T]):
         create : T
             the attack instance built on the data
         """
-        return self.__cls(db, **self.__additional_args)
+        return self.__cls(db, *args, **self.__additional_args)
 
     def required_extensions(self) -> Set[Type[E]]:
         """

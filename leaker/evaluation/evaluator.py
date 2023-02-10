@@ -156,7 +156,7 @@ class KeywordAttackEvaluator(Evaluator):
 RelationalAttackEvaluator = KeywordAttackEvaluator  # Works exactly the same as in the keyword case
 
 
-class RelationalAttackEstimationErrorEvaluator(KeywordAttackEvaluator):
+class ErrorSimulationRelationalAttackEvaluator(KeywordAttackEvaluator):
     """
     A RelationalAttackEstimationErrorEvaluator can be used to run attacks with a specified estimation error.
     The attack init receives an additional parameter 'error_rate' on which it can mock the known data estimates.
@@ -186,7 +186,7 @@ class RelationalAttackEstimationErrorEvaluator(KeywordAttackEvaluator):
     def __init__(self, evaluation_case: EvaluationCase,
                  dataset_sampler: Union[KnownDatasetSampler, SampledDatasetSampler], query_selector: QuerySelector,
                  sinks: Union[DataSink, Iterable[DataSink]], parallelism: int = 1, error_rates: List[float] = [1.0]):
-        super(RelationalAttackEstimationErrorEvaluator, self).__init__(evaluation_case, dataset_sampler, query_selector, sinks, parallelism)
+        super().__init__(evaluation_case, dataset_sampler, query_selector, sinks, parallelism)
         self._error_rates = error_rates
 
     def _to_inputs(self, dataset: Dataset, kdr: float, known: Dataset) -> \
@@ -195,7 +195,7 @@ class RelationalAttackEstimationErrorEvaluator(KeywordAttackEvaluator):
         for i, queries in enumerate(self._query_selector.select(dataset, known)):
             for attack in self._evaluation_case.attacks():
                 for error_rate in self._error_rates:
-                    yield dataset, i, error_rate, attack.create(known), queries
+                    yield dataset, i, error_rate, attack.create(known, error_rate), queries
 
     def run(self) -> None:
         """Runs the evaluation"""
@@ -233,22 +233,19 @@ class RelationalAttackEstimationErrorEvaluator(KeywordAttackEvaluator):
                     performances: List[Tuple[str, int, float, float]] = []
                     for dataset, user, kdr, attack, queries in self._produce_input():
                         performances.append(
-                                RelationalAttackEstimationErrorEvaluator._evaluate(dataset, user, kdr, attack,
+                                ErrorSimulationRelationalAttackEvaluator._evaluate(dataset, user, kdr, attack,
                                                                                     queries))
 
                 else:
                     # create thread pool and do evaluation in parallel
                     with ThreadPool(processes=self._parallelism) as pool:
-                        performances = pool.starmap(func=RelationalAttackEstimationErrorEvaluator._evaluate,
+                        performances = pool.starmap(func=ErrorSimulationRelationalAttackEvaluator._evaluate,
                                                     iterable=self._produce_input(pool))
                         log.info("All computations completed.")
 
                 for series, user, error_rate, result in performances:
                     for sink in self._sinks:
-                        # TODO: create special plotting for errors, then mapping is not needed
-                        kdr_error_mapping = (error_rate - min(self._error_rates)) / (max(self._error_rates) -
-                                                                                     min(self._error_rates))
-                        sink.offer_data(series, user, kdr_error_mapping, result)
+                        sink.offer_data(series, user, error_rate, result)
 
             log.info(f"RUN {run} COMPLETED IN {stopwatch.lap()}")
 

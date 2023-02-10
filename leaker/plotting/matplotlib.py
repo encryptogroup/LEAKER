@@ -4,6 +4,7 @@ For License information see the LICENSE file.
 Authors: Johannes Leupold, Amos Treiber
 
 """
+import math
 import os
 from abc import ABC
 from typing import List, Dict, Optional, Iterator, Tuple
@@ -99,6 +100,45 @@ class KeywordMatPlotLibSink(MatPlotLibSink):
             else:
                 plt.errorbar(x * 100, y, yerr=[y_min, y_max], label=series_id, marker=marker,
                              linewidth=1, capsize=3)
+
+        plt.legend()
+
+        if self._out_file is not None:
+            if not os.path.exists(FIGURE_DIRECTORY):
+                os.makedirs(FIGURE_DIRECTORY)
+            plt.savefig(self._out_file)
+            import tikzplotlib
+            tikzplotlib.save(f"{self._out_file[:-4]}.tikz")
+        else:
+            plt.show()
+
+
+class ErrorSimulationRelationalMatPlotLibSink(MatPlotLibSink):
+    """Uses the median of reconstruction rates"""
+    def flush(self) -> None:
+        plt.figure(dpi=300)
+
+        plt.ylabel('Recovery Rate')
+        plt.ylim(0, 1.05)
+        plt.yticks(np.linspace(0, 1, num=6))
+
+        plt.grid(True)
+
+        x_max = 2
+
+        for x, y, series_id, y_min, y_max, marker in self.yield_plotpoints():
+            if max(x) > x_max:
+                x_max = max(x)
+
+            if not y_max.any() and not y_min.any():
+                plt.plot(x, y, label=series_id, marker=marker, linewidth=1)
+            else:
+                plt.errorbar(x, y, yerr=[y_min, y_max], label=series_id, marker=marker,
+                             linewidth=1, capsize=3)
+
+        plt.xlabel('Avg Q-Error')
+        plt.xlim(0.95, x_max + 0.05)
+        plt.xticks(np.linspace(1, math.ceil(x_max), num=math.ceil(math.ceil(x_max)/0.5)-1))
 
         plt.legend()
 

@@ -111,7 +111,7 @@ class RelationalScoring(Countv2):
     _known_query_size: float
     _known_keywords: List[str]
     __est: RelationalEstimator
-    __full_cooc_ext: CoOccurrenceExtension
+    _full_cooc_ext: CoOccurrenceExtension
 
     def __init__(self, known: Dataset, known_query_size: float = 0.15):
         super(RelationalScoring, self).__init__(known)
@@ -128,7 +128,7 @@ class RelationalScoring(Countv2):
         if not full.has_extension(CoOccurrenceExtension):
             full.extend_with(CoOccurrenceExtension)
 
-        self.__full_cooc_ext = full.get_extension(CoOccurrenceExtension)
+        self._full_cooc_ext = full.get_extension(CoOccurrenceExtension)
         self.__est = self._get_estimator(known, full)
 
     @classmethod
@@ -167,7 +167,7 @@ class RelationalScoring(Countv2):
         for i in range(len(self._known_keywords)):
             for j in range(k):
                 est_cooc = estimator.estimate(self._known_keywords[i], known_queries[known_queries_pos[j]])
-                act_cooc = self.__full_cooc_ext.co_occurrence(self._known_keywords[i],
+                act_cooc = self._full_cooc_ext.co_occurrence(self._known_keywords[i],
                                                               known_queries[known_queries_pos[j]])
                 coocc_s_kw[i][j] = est_cooc / n
                 errors.append(ErrorMetric(est_cooc, act_cooc))
@@ -220,6 +220,36 @@ class RelationalScoring(Countv2):
         return uncovered
 
 
+class ErrorSimulationRelationalScoring(RelationalScoring):
+    """
+    Basic Scoring attack that can be used with estimators
+    """
+    __mean_error: float
+
+    def __init__(self, known: Dataset, mean_error: float, known_query_size: float = 0.15):
+        super(ErrorSimulationRelationalScoring, self).__init__(known, known_query_size)
+        self.__mean_error = mean_error
+
+    @classmethod
+    def name(cls) -> str:
+        return "ErrorSimulationRelationalScoring"
+
+    def _build_cooc_s_kw_matrix(self, estimator: RelationalEstimator, k: int, known_queries, known_queries_pos, n: int):
+        coocc_s_kw = np.zeros((len(self._known_keywords), k))
+        for i in range(len(self._known_keywords)):
+            for j in range(k):
+                perfect_cooc = self._full_cooc_ext.co_occurrence(self._known_keywords[i],
+                                                              known_queries[known_queries_pos[j]])
+                if self.__mean_error != 1.0:
+                    gaussian_errors = np.random.normal(loc=self.__mean_error, scale=0.1, size=1)
+                    simulated_cooc = np.multiply(perfect_cooc, gaussian_errors)  # element-wise multiplication
+                    coocc_s_kw[i][j] = simulated_cooc / n
+                else:
+                    coocc_s_kw[i][j] = perfect_cooc / n
+
+        return coocc_s_kw
+
+
 class NaruRelationalScoring(RelationalScoring):
     """
     Scoring with Naru
@@ -242,10 +272,7 @@ class PerfectRelationalScoring(RelationalScoring):
     If known_query_size == 0, they will be uncovered like in [CGPR15]
     """
 
-    __est_sampling: SamplingRelationalEstimator
-
     def __init__(self, known: SQLRelationalDatabase, known_query_size: float = 0.15):
-        self.__est_sampling = SamplingRelationalEstimator(known, known.parent())
         super(PerfectRelationalScoring, self).__init__(known, known_query_size)
 
     def _get_estimator(self, known, full):
