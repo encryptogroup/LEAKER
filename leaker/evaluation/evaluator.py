@@ -57,17 +57,18 @@ class KeywordAttackEvaluator(Evaluator):
         the number of parallel threads to use in the evaluation
         default: 1
     """
-    __dataset_sampler: Union[KnownDatasetSampler,SampledDatasetSampler]
-    __query_selector: QuerySelector
+    _dataset_sampler: Union[KnownDatasetSampler, SampledDatasetSampler]
+    _query_selector: QuerySelector
 
-    def __init__(self, evaluation_case: EvaluationCase, dataset_sampler: Union[KnownDatasetSampler,SampledDatasetSampler], query_selector: QuerySelector,
+    def __init__(self, evaluation_case: EvaluationCase,
+                 dataset_sampler: Union[KnownDatasetSampler, SampledDatasetSampler], query_selector: QuerySelector,
                  sinks: Union[DataSink, Iterable[DataSink]], parallelism: int = 1):
         super().__init__(evaluation_case, sinks, parallelism)
-        self.__dataset_sampler = dataset_sampler
-        self.__query_selector = query_selector
+        self._dataset_sampler = dataset_sampler
+        self._query_selector = query_selector
 
     @staticmethod
-    def __evaluate(dataset: Dataset, user: int, kdr: float, attack: KeywordAttack, queries: List[str]) -> \
+    def _evaluate(dataset: Dataset, user: int, kdr: float, attack: KeywordAttack, queries: List[str]) -> \
             Tuple[str, int, float, float]:
         # recover queries using the given attack
         recovered = attack(dataset, queries)
@@ -76,23 +77,23 @@ class KeywordAttackEvaluator(Evaluator):
 
         return attack.name(), user, kdr, correct / len(queries)
 
-    def __to_inputs(self, dataset: Dataset, kdr: float, known: Dataset) -> Iterator[Tuple[Dataset, int, float, Attack,
-                                                                                          List]]:
-        # yield input tuples for __evaluate for each attack on the given known data set and known data rate
-        for i, queries in enumerate(self.__query_selector.select(dataset, known)):
+    def _to_inputs(self, dataset: Dataset, kdr: float, known: Dataset) -> Iterator[Tuple[Dataset, int, float, Attack,
+    List]]:
+        # yield input tuples for _evaluate for each attack on the given known data set and known data rate
+        for i, queries in enumerate(self._query_selector.select(dataset, known)):
             for attack in self._evaluation_case.attacks():
                 yield dataset, i, kdr, attack.create(known), queries
 
-    def __produce_input(self, pool: Optional[Pool] = None) \
+    def _produce_input(self, pool: Optional[Pool] = None) \
             -> Iterator[Tuple[Dataset, int, float, KeywordAttack, List[str]]]:
-        # yield all input tuples for __evaluate either by using parallel computation or sequential computation, based on
+        # yield all input tuples for _evaluate either by using parallel computation or sequential computation, based on
         # whether there is a multi threading pool
         datasets = self._evaluation_case.datasets()
         if pool is None:
-            for inputs in starmap(self.__to_inputs, self.__dataset_sampler.sample(datasets)):
+            for inputs in starmap(self._to_inputs, self._dataset_sampler.sample(datasets)):
                 yield from inputs
         else:
-            for inputs in pool.starmap(self.__to_inputs, iterable=self.__dataset_sampler.sample(datasets, pool)):
+            for inputs in pool.starmap(self._to_inputs, iterable=self._dataset_sampler.sample(datasets, pool)):
                 yield from inputs
 
     def run(self) -> None:
@@ -108,7 +109,7 @@ class KeywordAttackEvaluator(Evaluator):
             for sink in self._sinks:
                 sink.register_series(attack.name())
 
-        reuse: bool = self.__dataset_sampler.reuse()
+        reuse: bool = self._dataset_sampler.reuse()
 
         stopwatch = Stopwatch()
         stopwatch.start()
@@ -122,21 +123,21 @@ class KeywordAttackEvaluator(Evaluator):
             sample_runs: int = 1
             if reuse:
                 sample_runs: int = self._evaluation_case.runs()
-                self.__dataset_sampler.set_reuse(True)
+                self._dataset_sampler.set_reuse(True)
 
             for sample_run in range(1, sample_runs + 1):
                 log.info(f"Starting evaluation {run}-{sample_run} with new queries")
                 if self._parallelism == 1:
                     # do evaluation sequentially
                     performances: List[Tuple[str, int, float, float]] = []
-                    for dataset, user, kdr, attack, queries in self.__produce_input():
-                        performances.append(KeywordAttackEvaluator.__evaluate(dataset, user, kdr, attack, queries))
+                    for dataset, user, kdr, attack, queries in self._produce_input():
+                        performances.append(KeywordAttackEvaluator._evaluate(dataset, user, kdr, attack, queries))
 
                 else:
                     # create thread pool and do evaluation in parallel
                     with ThreadPool(processes=self._parallelism) as pool:
-                        performances = pool.starmap(func=KeywordAttackEvaluator.__evaluate,
-                                                    iterable=self.__produce_input(pool))
+                        performances = pool.starmap(func=KeywordAttackEvaluator._evaluate,
+                                                    iterable=self._produce_input(pool))
                         log.info("All computations completed.")
 
                 for series, user, kdr, result in performances:
@@ -153,6 +154,109 @@ class KeywordAttackEvaluator(Evaluator):
 
 
 RelationalAttackEvaluator = KeywordAttackEvaluator  # Works exactly the same as in the keyword case
+
+
+class RelationalAttackEstimationErrorEvaluator(KeywordAttackEvaluator):
+    """
+    A RelationalAttackEstimationErrorEvaluator can be used to run attacks with a specified estimation error.
+    The attack init receives an additional parameter 'error_rate' on which it can mock the known data estimates.
+    Important: only works properly for single known-data rate evaluations (x-axix is used for error-rates)
+    It is capable of running multiple attacks in parallel to speed up the evaluation.
+
+    Parameters
+    ----------
+    evaluation_case : EvaluationCase
+        the evaluation case to run, i. e. the attacks, the data set and the number of runs for each attack
+    dataset_sampler : KnownDatasetSampler
+        the data set sampling settings, including the known data rate values
+    query_selector : QuerySelector
+        the policies for selecting the query sequence including the selectivity, the type and size of the query space
+        and the number of queries
+    sinks : Union[DataSink, Iterable[DataSink]]
+        one or multiple data sinks to write performance data to
+    parallelism : int
+        the number of parallel threads to use in the evaluation
+        default: 1
+    error_rates : List[float]
+        the q-error rates the attack should be evaluated on
+    """
+
+    _error_rates: List[float]
+
+    def __init__(self, evaluation_case: EvaluationCase,
+                 dataset_sampler: Union[KnownDatasetSampler, SampledDatasetSampler], query_selector: QuerySelector,
+                 sinks: Union[DataSink, Iterable[DataSink]], parallelism: int = 1, error_rates: List[float] = [1.0]):
+        super(RelationalAttackEstimationErrorEvaluator, self).__init__(evaluation_case, dataset_sampler, query_selector, sinks, parallelism)
+        self._error_rates = error_rates
+
+    def _to_inputs(self, dataset: Dataset, kdr: float, known: Dataset) -> \
+            Iterator[Tuple[Dataset, int, float, Attack, List]]:
+        # yield input tuples for _evaluate for each attack on the given known data set and known data rate
+        for i, queries in enumerate(self._query_selector.select(dataset, known)):
+            for attack in self._evaluation_case.attacks():
+                for error_rate in self._error_rates:
+                    yield dataset, i, error_rate, attack.create(known), queries
+
+    def run(self) -> None:
+        """Runs the evaluation"""
+
+        log.info(f"Running {self._evaluation_case.runs()} evaluation runs with parallelism {self._parallelism}")
+        log.info("Evaluated Attacks:")
+
+        # log and register all evaluated attacks with all sinks
+        for attack in self._evaluation_case.attacks():
+            log.info(f" - {attack.name()}")
+
+            for sink in self._sinks:
+                sink.register_series(attack.name())
+
+        reuse: bool = self._dataset_sampler.reuse()
+
+        stopwatch = Stopwatch()
+        stopwatch.start()
+
+        # Perform desired number of runs
+        for run in range(1, self._evaluation_case.runs() + 1):
+            log.info("######################################################################################")
+            log.info(f"# RUN {run}")
+            log.info("######################################################################################")
+
+            sample_runs: int = 1
+            if reuse:
+                sample_runs: int = self._evaluation_case.runs()
+                self._dataset_sampler.set_reuse(True)
+
+            for sample_run in range(1, sample_runs + 1):
+                log.info(f"Starting evaluation {run}-{sample_run} with new queries")
+                if self._parallelism == 1:
+                    # do evaluation sequentially
+                    performances: List[Tuple[str, int, float, float]] = []
+                    for dataset, user, kdr, attack, queries in self._produce_input():
+                        performances.append(
+                                RelationalAttackEstimationErrorEvaluator._evaluate(dataset, user, kdr, attack,
+                                                                                    queries))
+
+                else:
+                    # create thread pool and do evaluation in parallel
+                    with ThreadPool(processes=self._parallelism) as pool:
+                        performances = pool.starmap(func=RelationalAttackEstimationErrorEvaluator._evaluate,
+                                                    iterable=self._produce_input(pool))
+                        log.info("All computations completed.")
+
+                for series, user, error_rate, result in performances:
+                    for sink in self._sinks:
+                        # TODO: create special plotting for errors, then mapping is not needed
+                        kdr_error_mapping = (error_rate - min(self._error_rates)) / (max(self._error_rates) -
+                                                                                     min(self._error_rates))
+                        sink.offer_data(series, user, kdr_error_mapping, result)
+
+            log.info(f"RUN {run} COMPLETED IN {stopwatch.lap()}")
+
+        log.info("######################################################################################")
+        log.info(f"Evaluation completed in {stopwatch.stop()}")
+
+        for sink in self._sinks:
+            sink.flush()
 
 
 class RangeAttackEvaluator(Evaluator):
@@ -198,7 +302,7 @@ class RangeAttackEvaluator(Evaluator):
         return attack.name(), len(queries), error.calc_error(db, recovered, normalize), user
 
     def _to_inputs(self, query_count: int) -> Iterator[Tuple[RangeDatabase, RangeAttack, List[Tuple[int, int]],
-                                                             Type[Error], bool, int]]:
+    Type[Error], bool, int]]:
         # yield input tuples for __evaluate for each attack on the given known data set and known data rate
         for db in self._evaluation_case.datasets():
             for attack in self._evaluation_case.attacks():
@@ -206,9 +310,9 @@ class RangeAttackEvaluator(Evaluator):
                     yield db, attack.create(db), queries, self._evaluation_case.error(), self.__normalize, i
 
     def _produce_input(self, query_count: int, pool: Optional[Pool] = None) -> Iterator[Tuple[RangeDatabase,
-                                                                                              RangeAttack,
-                                                                                              List[Tuple[int, int]],
-                                                                                              Type[Error], bool, int]]:
+    RangeAttack,
+    List[Tuple[int, int]],
+    Type[Error], bool, int]]:
         # yield all input tuples for __evaluate either by using parallel computation or sequential computation, based on
         # whether there is a multi processing pool
         if pool is None:
