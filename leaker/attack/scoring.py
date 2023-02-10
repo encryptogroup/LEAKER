@@ -11,7 +11,8 @@ from typing import Iterable, List, Any, Dict, Set, TypeVar, Type
 import numpy as np
 
 from .count import Countv2
-from .relational_estimators.estimator import NaruRelationalEstimator, SamplingRelationalEstimator
+from .relational_estimators.estimator import NaruRelationalEstimator, SamplingRelationalEstimator, RelationalEstimator, \
+    PerfectRelationalEstimator
 from .relational_estimators.eval import ErrorMetric
 from .relational_estimators.uae_estimator import UaeRelationalEstimator
 from ..api import Dataset, LeakagePattern, Extension
@@ -33,12 +34,11 @@ class ScoringAttack(Countv2):
     _known_keywords: List[str]
 
     def __init__(self, known: Dataset, known_query_size: float = 0.15):
-        #log.info(f"Setting up {self.name()} attack for {known.name()}. This might take some time.")
         super(ScoringAttack, self).__init__(known)
         self._countv2 = None
         self._known_keywords = list(self._known_keywords)
         self._known_query_size = known_query_size
-        #log.info("Setup complete.")
+        # log.info("Setup complete.")
 
     @classmethod
     def name(cls) -> str:
@@ -104,132 +104,156 @@ class ScoringAttack(Countv2):
         return uncovered
 
 
-class NaruScoringAttack(ScoringAttack):
+class RelationalScoring(Countv2):
+    """
+    Basic Scoring attack that can be used with estimators
+    """
+    _known_query_size: float
+    _known_keywords: List[str]
+    __est: RelationalEstimator
+    __full_cooc_ext: CoOccurrenceExtension
+
+    def __init__(self, known: Dataset, known_query_size: float = 0.15):
+        super(RelationalScoring, self).__init__(known)
+        self._countv2 = None
+        self._known_keywords = list(self._known_keywords)
+        self._known_query_size = known_query_size
+
+        if isinstance(known, SampledSQLRelationalDatabase):
+            full = known.parent()
+        else:
+            # dataset is not sampled, therefore whole dataset is known
+            full = known
+
+        if not full.has_extension(CoOccurrenceExtension):
+            full.extend_with(CoOccurrenceExtension)
+
+        self.__full_cooc_ext = full.get_extension(CoOccurrenceExtension)
+        self.__est = self._get_estimator(known, full)
+
+    @classmethod
+    def name(cls) -> str:
+        return "RelationalScoring"
+
+    @classmethod
+    def required_leakage(cls) -> List[LeakagePattern[Any]]:
+        return [CoOccurrence()]
+
+    @classmethod
+    def required_extensions(cls) -> Set[Type[E]]:
+        return {CoOccurrenceExtension}
+
+    def _known_response_length(self, keyword: str) -> int:
+        return self._known_coocc.selectivity(keyword)
+
+    def _get_known_queries(self, dataset: Dataset, queries: List[str]) -> Dict[int, str]:
+        if self._known_query_size == 0:
+            uncovered = super(RelationalScoring, self).recover(dataset, queries)
+            known_queries = {i: kw for i, kw in enumerate(uncovered) if kw != ""}
+        else:
+            known_query_ids = random.sample(range(len(queries)), int(self._known_query_size * len(list(queries))))
+            known_queries = {i: queries[i] for i in known_query_ids}
+
+        return known_queries
+
+    def _get_estimator(self, known, full):
+        return SamplingRelationalEstimator(known, full)
+
+    def _build_cooc_s_kw_matrix(self, estimator: RelationalEstimator, k: int, known_queries, known_queries_pos, n: int):
+        errors = []
+        errors_without_zero_one = []
+
+        coocc_s_kw = np.zeros((len(self._known_keywords), k))
+        for i in range(len(self._known_keywords)):
+            for j in range(k):
+                est_cooc = estimator.estimate(self._known_keywords[i], known_queries[known_queries_pos[j]])
+                act_cooc = self.__full_cooc_ext.co_occurrence(self._known_keywords[i],
+                                                              known_queries[known_queries_pos[j]])
+                coocc_s_kw[i][j] = est_cooc / n
+                errors.append(ErrorMetric(est_cooc, act_cooc))
+                if not (est_cooc == 0 and act_cooc == 1) and not (est_cooc == 1 and act_cooc == 0):
+                    errors_without_zero_one.append(ErrorMetric(est_cooc, act_cooc))
+
+        import csv
+        with open('error_logs/' + self.name() + '.csv', 'a') as fd:
+            row = [np.median(errors), np.quantile(errors, 0.95), np.quantile(errors, .99), np.max(errors),
+                   np.median(errors_without_zero_one), np.quantile(errors_without_zero_one, 0.95),
+                   np.quantile(errors_without_zero_one, .99), np.max(errors_without_zero_one)]
+            writer = csv.writer(fd)
+            writer.writerow(row)
+
+        return coocc_s_kw
+
+    def recover(self, dataset: Dataset, queries: Iterable[str]) -> List[str]:
+        log.info(f"Running {self.name()}")
+        queries = list(queries)
+        coocc = self.required_leakage()[0](dataset, queries)
+
+        known_queries = self._get_known_queries(dataset, queries)
+
+        k = len(known_queries)
+        known_queries_pos = [i for i in known_queries.keys()]
+
+        coocc_s_td = np.zeros((len(queries), k))
+        for i in range(len(queries)):
+            for j in range(k):
+                coocc_s_td[i][j] = coocc[i][known_queries_pos[j]] / len(dataset.doc_ids())
+
+        n = len(dataset.doc_ids())  # for normalization
+        coocc_s_kw = self._build_cooc_s_kw_matrix(self.__est, k, known_queries, known_queries_pos, n)
+
+        for i, _ in enumerate(queries):
+            if i not in known_queries:
+                scores = coocc_s_kw - coocc_s_td[i].T
+                scores = -np.log(np.linalg.norm(scores, axis=1))
+                known_queries[i] = self._known_keywords[np.argmax(scores)]
+
+        uncovered = []
+        for i, _ in enumerate(queries):
+            if i in known_queries:
+                uncovered.append(known_queries[i])
+            else:
+                uncovered.append("")
+
+        log.info(f"Reconstruction completed.")
+
+        return uncovered
+
+
+class NaruRelationalScoring(RelationalScoring):
     """
     Scoring with Naru
     """
 
-    __est: NaruRelationalEstimator
-
     def __init__(self, known: SQLRelationalDatabase, known_query_size: float = 0.15):
-        self.__est = NaruRelationalEstimator(known, known.parent())
-        super(NaruScoringAttack, self).__init__(known, known_query_size)
+        super(NaruRelationalScoring, self).__init__(known, known_query_size)
 
     @classmethod
     def name(cls) -> str:
-        return "NaruScoring"
+        return "NaruRelationalScoring"
 
-    def __calculate_known_cooc(self, q1, q2) -> int:
-        return round(self.__est.estimate(q1, q2))
-
-    def recover(self, dataset: Dataset, queries: Iterable[str]) -> List[str]:
-        log.info(f"Running {self.name()}")
-        queries = list(queries)
-        coocc = self.required_leakage()[0](dataset, queries)
-
-        known_queries = self._get_known_queries(dataset, queries)
-
-        k = len(known_queries)
-        known_queries_pos = [i for i in known_queries.keys()]
-
-        coocc_s_td = np.zeros((len(queries), k))
-        for i in range(len(queries)):
-            for j in range(k):
-                coocc_s_td[i][j] = coocc[i][known_queries_pos[j]]
-
-        coocc_s_kw = np.zeros((len(self._known_keywords), k))
-        for i in range(len(self._known_keywords)):
-            for j in range(k):
-                coocc_s_kw[i][j] = self.__calculate_known_cooc(self._known_keywords[i],
-                                                               known_queries[known_queries_pos[j]])
-
-        for i, _ in enumerate(queries):
-            if i not in known_queries:
-                scores = coocc_s_kw - coocc_s_td[i].T
-                scores = -np.log(np.linalg.norm(scores, axis=1))
-                known_queries[i] = self._known_keywords[np.argmax(scores)]
-
-        uncovered = []
-        for i, _ in enumerate(queries):
-            if i in known_queries:
-                uncovered.append(known_queries[i])
-            else:
-                uncovered.append("")
-
-        log.info(f"Reconstruction completed.")
-
-        return uncovered
+    def _get_estimator(self, known, full):
+        return NaruRelationalEstimator(known, full)
 
 
-class FastNaruScoringAttack(ScoringAttack):
+class PerfectRelationalScoring(RelationalScoring):
     """
-    Naru for all except sampling 0
+    Implements the Scoring attack from [DHP21]. Using perfect co-occurrences.
+    If known_query_size == 0, they will be uncovered like in [CGPR15]
     """
 
-    __est: NaruRelationalEstimator
     __est_sampling: SamplingRelationalEstimator
 
-    ''' Set estimation lower limit absolute (e.g. 1 to skip sampling in 0 case) and upper limit relative (e.g. 0.5% as 
-    in naru paper). Upper absolute limit will then be calculated based on the number of rows in the full dataset. '''
-    __estimation_lower_limit = 1
-    __estimation_upper_limit_relative = 1
-    __estimation_upper_limit: int
-
     def __init__(self, known: SQLRelationalDatabase, known_query_size: float = 0.15):
-        self.__est = NaruRelationalEstimator(known, known.parent())
         self.__est_sampling = SamplingRelationalEstimator(known, known.parent())
-        self.__estimation_upper_limit = round(len(known.parent().queries()) * self.__estimation_upper_limit_relative)
-        super(FastNaruScoringAttack, self).__init__(known, known_query_size)
+        super(PerfectRelationalScoring, self).__init__(known, known_query_size)
+
+    def _get_estimator(self, known, full):
+        return PerfectRelationalEstimator(known, full)
 
     @classmethod
     def name(cls) -> str:
-        return "FastNaruScoring"
-
-    def __calculate_known_cooc(self, q1, q2) -> int:
-        sampled_cooc = round(self.__est_sampling.estimate(q1, q2))
-        if self.__estimation_lower_limit <= sampled_cooc <= self.__estimation_upper_limit:
-            return round(self.__est.estimate(q1, q2))
-        else:
-            # use sampling
-            return sampled_cooc
-
-    def recover(self, dataset: Dataset, queries: Iterable[str]) -> List[str]:
-        log.info(f"Running {self.name()}")
-        queries = list(queries)
-        coocc = self.required_leakage()[0](dataset, queries)
-
-        known_queries = self._get_known_queries(dataset, queries)
-
-        k = len(known_queries)
-        known_queries_pos = [i for i in known_queries.keys()]
-
-        coocc_s_td = np.zeros((len(queries), k))
-        for i in range(len(queries)):
-            for j in range(k):
-                coocc_s_td[i][j] = coocc[i][known_queries_pos[j]]
-
-        coocc_s_kw = np.zeros((len(self._known_keywords), k))
-        for i in range(len(self._known_keywords)):
-            for j in range(k):
-                coocc_s_kw[i][j] = self.__calculate_known_cooc(self._known_keywords[i],
-                                                               known_queries[known_queries_pos[j]])
-
-        for i, _ in enumerate(queries):
-            if i not in known_queries:
-                scores = coocc_s_kw - coocc_s_td[i].T
-                scores = -np.log(np.linalg.norm(scores, axis=1))
-                known_queries[i] = self._known_keywords[np.argmax(scores)]
-
-        uncovered = []
-        for i, _ in enumerate(queries):
-            if i in known_queries:
-                uncovered.append(known_queries[i])
-            else:
-                uncovered.append("")
-
-        log.info(f"Reconstruction completed.")
-
-        return uncovered
+        return "PerfectScoring"
 
 
 class UaeScoringAttack(ScoringAttack):
@@ -273,9 +297,9 @@ class UaeScoringAttack(ScoringAttack):
         for i in range(len(self._known_keywords)):
             for j in range(k):
                 est_sel = self.__calculate_known_cooc(self._known_keywords[i],
-                                                               known_queries[known_queries_pos[j]])
+                                                      known_queries[known_queries_pos[j]])
                 act_sel = cooc_ext.co_occurrence(self._known_keywords[i],
-                                                               known_queries[known_queries_pos[j]])
+                                                 known_queries[known_queries_pos[j]])
                 coocc_s_kw[i][j] = est_sel
 
         for i, _ in enumerate(queries):
@@ -410,14 +434,14 @@ class SamplingScoringAttack(ScoringAttack):
         for i in range(len(self._known_keywords)):
             for j in range(k):
                 est_cooc = self.__calculate_known_cooc(self._known_keywords[i],
-                                                               known_queries[known_queries_pos[j]])
+                                                       known_queries[known_queries_pos[j]])
                 act_cooc = full_cooc_ext.co_occurrence(self._known_keywords[i],
-                                                               known_queries[known_queries_pos[j]])
-                #act_cooc2 = len([r for r in dataset.query(self._known_keywords[i])
+                                                       known_queries[known_queries_pos[j]])
+                # act_cooc2 = len([r for r in dataset.query(self._known_keywords[i])
                 #                 if r in dataset.query(known_queries[known_queries_pos[j]])])
-                #assert act_cooc == act_cooc2
+                # assert act_cooc == act_cooc2
                 errors.append(ErrorMetric(est_cooc, act_cooc))
-                if not (est_cooc==0 and act_cooc==1) and not (est_cooc==1 and act_cooc==0):
+                if not (est_cooc == 0 and act_cooc == 1) and not (est_cooc == 1 and act_cooc == 0):
                     errors_without_zero_one.append(ErrorMetric(est_cooc, act_cooc))
                 coocc_s_kw[i][j] = est_cooc
 
@@ -437,67 +461,10 @@ class SamplingScoringAttack(ScoringAttack):
         log.info(f"Reconstruction completed.")
 
         log.info("MEDIAN ERRORS")
-        #log.info(errors)
+        # log.info(errors)
         log.info(((np.median(errors), np.quantile(errors, 0.95), np.quantile(errors, .99), np.max(errors)),
                   (np.median(errors_without_zero_one), np.quantile(errors_without_zero_one, 0.95),
                    np.quantile(errors_without_zero_one, .99), np.max(errors_without_zero_one))))
-
-        return uncovered
-
-
-class PerfectScoringAttack(ScoringAttack):
-    """
-    Implements the Scoring attack from [DHP21]. Using perfect co-occurrences.
-    If known_query_size == 0, they will be uncovered like in [CGPR15]
-    """
-
-    __est_sampling: SamplingRelationalEstimator
-
-    def __init__(self, known: SQLRelationalDatabase, known_query_size: float = 0.15):
-        self.__est_sampling = SamplingRelationalEstimator(known, known.parent())
-        super(PerfectScoringAttack, self).__init__(known, known_query_size)
-
-    @classmethod
-    def name(cls) -> str:
-        return "PerfectScoring"
-
-    def recover(self, dataset: Dataset, queries: Iterable[str]) -> List[str]:
-        log.info(f"Running {self.name()}")
-        queries = list(queries)
-        full_cooc_ext = dataset.get_extension(CoOccurrenceExtension)
-
-        coocc = self.required_leakage()[0](dataset, queries)
-
-        known_queries = self._get_known_queries(dataset, queries)
-
-        k = len(known_queries)
-        known_queries_pos = [i for i in known_queries.keys()]
-
-        coocc_s_td = np.zeros((len(queries), k))
-        for i in range(len(queries)):
-            for j in range(k):
-                coocc_s_td[i][j] = coocc[i][known_queries_pos[j]]
-
-        coocc_s_kw = np.zeros((len(self._known_keywords), k))
-        for i in range(len(self._known_keywords)):
-            for j in range(k):
-                coocc_s_kw[i][j] = full_cooc_ext.co_occurrence(self._known_keywords[i],
-                                                               known_queries[known_queries_pos[j]])
-
-        for i, _ in enumerate(queries):
-            if i not in known_queries:
-                scores = coocc_s_kw - coocc_s_td[i].T
-                scores = -np.log(np.linalg.norm(scores, axis=1))
-                known_queries[i] = self._known_keywords[np.argmax(scores)]
-
-        uncovered = []
-        for i, _ in enumerate(queries):
-            if i in known_queries:
-                uncovered.append(known_queries[i])
-            else:
-                uncovered.append("")
-
-        log.info(f"Reconstruction completed.")
 
         return uncovered
 

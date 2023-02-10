@@ -61,10 +61,14 @@ class NaruRelationalEstimator(RelationalEstimator):
     __residual = True
     __direct_io = True
 
+    __sampling_est: RelationalEstimator
+
     def __init__(self, sample: RelationalDatabase, full: RelationalDatabase, epochs: int = 20):  # epochs 100 for large model
         self._table_dict = dict()
         self.__epochs = epochs
         super().__init__(sample, full)
+
+        self.__sampling_est = SamplingRelationalEstimator(sample, full)
 
         if not self._dataset_sample.has_extension(PandasExtension):
             self._dataset_sample.extend_with(PandasExtension)
@@ -171,6 +175,9 @@ class NaruRelationalEstimator(RelationalEstimator):
             if kw2.table != kw.table:
                 return 0
             else:
+                est_sampling_cooc = self.__sampling_est.estimate(kw, kw2)
+                if est_sampling_cooc == 0:
+                    return 0
                 return self._estimator[kw.table].Query([c for c in table.Columns() if f"attr_{kw.attr}" in c.name] +
                                                        [c for c in table.Columns() if f"attr_{kw2.attr}" in c.name],
                                                        ["=", "="], [kw.value, kw2.value])
