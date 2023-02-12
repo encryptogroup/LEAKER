@@ -1,4 +1,5 @@
 """Some Code in this file has been adapted from https://github.com/simon-oya/USENIX21-sap-code"""
+import random
 from calendar import week
 from logging import getLogger
 from typing import Iterable, List, Any, Dict, Set, TypeVar, Type, Optional
@@ -261,13 +262,13 @@ class RelationalSap(KeywordAttack):
         self._known_response_length = dict()
         self._known_keywords = dict()
 
-        self._perform_estimation(self._get_estimator(known, full), known)
+        self._perform_estimation(self._get_estimator(known, full), known, len(full.doc_ids()))
 
     def _get_estimator(self, known, full) -> RelationalEstimator:
         # estimator that returns rlen (based on full dataset size)
         return SamplingRelationalEstimator(known, full)
 
-    def _perform_estimation(self, estimator: RelationalEstimator, known: SQLRelationalDatabase):
+    def _perform_estimation(self, estimator: RelationalEstimator, known: SQLRelationalDatabase, n: int):
         errors = []
         errors_without_zero_one = []
 
@@ -328,6 +329,43 @@ class RelationalSap(KeywordAttack):
             res[i] = self._known_keywords[j]
 
         return res
+
+
+class ErrorSimulationRelationalSap(RelationalSap):
+    """
+    Implements the SAP attack from Oya & Kerschbaum for relational data using only ResponseLength patterns (no volume patterns).
+    """
+    __mean_error: float
+
+    def __init__(self, known: SQLRelationalDatabase, mean_error: float):
+        self.__mean_error = mean_error
+        super(ErrorSimulationRelationalSap, self).__init__(known)
+
+    @classmethod
+    def name(cls) -> str:
+        return "Error-Simulation-Relational-SAP"
+
+    def _perform_estimation(self, estimator: RelationalEstimator, known: SQLRelationalDatabase, n: int):
+        i = 0
+        for keyword in known.keywords():
+            self._known_keywords[i] = keyword
+            self._known_keywords[keyword] = i
+            i += 1
+            perfect_rlen = len(self.full_id_extension.doc_ids(keyword))
+            if self.__mean_error != 1.0:
+                gaussian_error = np.random.normal(loc=self.__mean_error, scale=0.1, size=None)
+
+                if random.choice([0, 1]) == 0:  # try to simulate max inversion
+                    simulated_rlen = perfect_rlen * gaussian_error
+                else:
+                    simulated_rlen = perfect_rlen / gaussian_error
+
+                if simulated_rlen > n:  # hungarian algorithm fails, if values are too large
+                    self._known_response_length[keyword] = n
+                else:
+                    self._known_response_length[keyword] = simulated_rlen
+            else:
+                self._known_response_length[keyword] = perfect_rlen
 
 
 class PerfectRelationalSap(RelationalSap):
