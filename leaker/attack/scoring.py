@@ -645,3 +645,30 @@ class PerfectRelationalRefinedScoring(RelationalRefinedScoring):
 
     def _get_estimator(self, known, full):
         return PerfectRelationalEstimator(known, full)
+
+
+class ErrorSimulationRelationalRefinedScoring(PerfectRelationalRefinedScoring):
+    """
+    Basic Scoring attack that can be used with estimators
+    """
+    __mean_error: float
+
+    def __init__(self, known: SQLRelationalDatabase, mean_error: float, known_query_size: float = 0.15, ref_speed: int = 10):
+        super(ErrorSimulationRelationalRefinedScoring, self).__init__(known, known_query_size, ref_speed)
+        self.__mean_error = mean_error
+
+    @classmethod
+    def name(cls) -> str:
+        return "ErrorSimulationRelationalRefinedScoring"
+
+    def _estimate_coocc(self, estimator: RelationalEstimator, q1: RelationalQuery, q2: RelationalQuery):
+        perfect_cooc = self._full_cooc_ext.co_occurrence(q1, q2)
+        if self.__mean_error != 1.0:
+            gaussian_error = np.random.normal(loc=self.__mean_error, scale=0.1, size=None)
+            if random.choice([0, 1]) == 0:  # try to simulate max inversion
+                simulated_cooc = perfect_cooc * gaussian_error
+            else:
+                simulated_cooc = perfect_cooc / gaussian_error
+            return simulated_cooc
+        else:
+            return perfect_cooc
