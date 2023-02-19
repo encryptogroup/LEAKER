@@ -218,7 +218,8 @@ class Ihop(KeywordAttack):
         #return {VolumeExtension, CoOccurrenceExtension}
         return {IdentityExtension, CoOccurrenceExtension}
     
-    def get_update_coefficients_functions(self,token_trace, token_info, ndocs):
+    def get_update_coefficients_functions(self, token_trace, token_info, ndocs, Vexp = None):
+        """ pass Vexp to overwrite it """
         def _build_cost_Vol_some_fixed(free_keywords, free_tags, fixed_keywords, fixed_tags):
             cost_vol = -compute_log_binomial_probability_matrix(ndocs, np.diagonal(Vexp)[free_keywords], np.diagonal(Vobs)[free_tags] * ndocs)
             for tag, kw in zip(fixed_tags, fixed_keywords):
@@ -253,7 +254,8 @@ class Ihop(KeywordAttack):
 
         if self._alpha == 0:
             Vobs = compute_Vobs(token_info, ndocs)
-            Vexp = get_Vexp(self._known(),self._known_ids,self._chosen_keywords)
+            if Vexp is None:
+                Vexp = get_Vexp(self._known(), self._known_ids, self._chosen_keywords)
             return _build_cost_Vol_some_fixed, rep_to_kw
         elif self._alpha == 1:  
             nq_per_tok, Fobs = compute_Fobs(token_trace, len(token_info))
@@ -263,7 +265,8 @@ class Ihop(KeywordAttack):
         else:
             Vobs = compute_Vobs(token_info, ndocs)
             fobs = compute_fobs(token_trace, len(token_info))
-            Vexp = get_Vexp(self._known(),self._known_ids,self._chosen_keywords)
+            if Vexp is None:
+                Vexp = get_Vexp(self._known(), self._known_ids, self._chosen_keywords)
             fexp = get_faux(self._known_f_matrix, self._nkw)
             def compute_cost(free_keywords, free_tags, fixed_keywords, fixed_tags):
                 return _build_cost_Vol_some_fixed(free_keywords, free_tags, fixed_keywords, fixed_tags) + \
@@ -333,6 +336,95 @@ class Ihop(KeywordAttack):
             try:
                 fixed_reps = [replica_predictions_for_each_token[token] for token in fixed_tokens]
             
+                free_replicas = [rep for rep in unknown_reps if rep not in fixed_reps]
+
+                c_matrix = compute_coef_matrix(free_replicas, free_tokens, fixed_reps, fixed_tokens)
+
+                row_ind, col_ind = hungarian(c_matrix)
+                for j, i in zip(col_ind, row_ind):
+                    replica_predictions_for_each_token[free_tokens[j]] = free_replicas[i]
+            except KeyError:
+                pass
+
+        keyword_predictions_for_each_query = []
+        for token in token_trace:
+            try:
+                keyword_predictions_for_each_query.append(replica_predictions_for_each_token[token])
+            except KeyError:
+                pass
+
+        pred = [self._chosen_keywords[kw_id] for kw_id in keyword_predictions_for_each_query]
+        # accuracy = np.mean(np.array([1 if real == prediction else 0 for real, prediction in zip(queries, pred)]))
+        # print("IHOP_accuracy =",accuracy)
+        return pred
+
+
+class PerfectIhop(Ihop):
+    """
+    Implements the IHOP attack from Oya & Kerschbaum for the relational setting
+    """
+    def __init__(self, known: Dataset, known_frequencies: np.ndarray = None, chosen_keywords: List[str] = None, query_log: KeywordQueryLog = None, alpha:float = 0.0, niters:int=1000, pct_free:float=0.25, modify: bool = False):
+        super(PerfectIhop, self).__init__(known, known_frequencies, chosen_keywords, query_log, alpha, niters, pct_free, modify)
+
+    @classmethod
+    def name(cls) -> str:
+        return "Perfect-IHOP"
+
+    def recover(self, dataset: Dataset, queries: Iterable[str]) -> List[str]:
+        ndocs = len(dataset)
+        rid = ResponseIdentity()
+        queries = list(queries)
+        doc_ids = dataset.doc_ids()
+        doc_to_id = {}
+        id_to_doc = {}
+        for id, doc in enumerate(doc_ids):
+            doc_to_id[doc] = id
+            id_to_doc[id] = doc
+        token_trace, token_info = self.process_traces(rid(dataset, queries), doc_to_id)
+
+        # Start relational estimator part
+        if not dataset.get_extension(CoOccurrenceExtension):
+            dataset.extend_with(CoOccurrenceExtension)
+        ide = dataset.get_extension(CoOccurrenceExtension)
+
+        epsilon = 1e-20  # Value to control that there are no zero elements
+        known_keywords = list(self._known().keywords())
+        nkw = len(known_keywords)
+        Vexp = np.zeros((nkw, nkw))
+        for kw1 in known_keywords:
+            i_kw1 = known_keywords.index(kw1)
+            for kw2 in known_keywords:
+                i_kw2 = known_keywords.index(kw2)
+                Vexp[i_kw1, i_kw2] = (ide.co_occurrence(kw1, kw2) + epsilon) / (ndocs + 2 * epsilon)
+
+        compute_coef_matrix, rep_to_kw = self.get_update_coefficients_functions(token_trace, token_info, ndocs, Vexp)
+
+        nrep = len(rep_to_kw)
+        ntok = len(token_info)
+
+        unknown_toks = [i for i in range(ntok)]
+        unknown_reps = [i for i in range(nrep)]
+
+        # First matching:
+        c_matrix_original = compute_coef_matrix(unknown_reps, unknown_toks, [], [])
+        row_ind, col_ind = hungarian(c_matrix_original)
+        replica_predictions_for_each_token = {}
+        for j, i in zip(col_ind, row_ind):
+            try:
+                replica_predictions_for_each_token[unknown_toks[j]] = unknown_reps[i]
+            except KeyError:
+                pass
+
+        # Iterate using co-occurrence:
+        n_free = int(self._pct_free * len(unknown_toks))
+        assert n_free > 1, log.error(f"n_free = {n_free} is too small.")
+        for _ in range(self._niters):
+            random_unknown_tokens = list(np.random.permutation(unknown_toks))
+            free_tokens = random_unknown_tokens[:n_free]
+            fixed_tokens = random_unknown_tokens[n_free:]
+            try:
+                fixed_reps = [replica_predictions_for_each_token[token] for token in fixed_tokens]
+
                 free_replicas = [rep for rep in unknown_reps if rep not in fixed_reps]
 
                 c_matrix = compute_coef_matrix(free_replicas, free_tokens, fixed_reps, fixed_tokens)
