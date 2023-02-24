@@ -1,14 +1,18 @@
 """Some Code in this file has been adapted from https://github.com/simon-oya/USENIX22-ihop-code"""
 from logging import getLogger
+import random
 from typing import Iterable, List, Any, Dict, Set, TypeVar, Type, Union
 
 import numpy as np
 from collections import Counter
 from scipy.optimize import linear_sum_assignment as hungarian
 
-from ..api import Extension, KeywordAttack, Dataset, LeakagePattern, KeywordQueryLog
+from .relational_estimators.estimator import SamplingRelationalEstimator, RelationalEstimator, \
+    PerfectRelationalEstimator
+from ..api import Extension, KeywordAttack, Dataset, LeakagePattern, KeywordQueryLog, RelationalQuery
 from ..extension import CoOccurrenceExtension, IdentityExtension
 from ..pattern import ResponseLength, Frequency, ResponseIdentity, CoOccurrence
+from ..sql_interface.sql_database import SampledSQLRelationalDatabase
 
 log = getLogger(__name__)
 
@@ -158,6 +162,8 @@ class Ihop(KeywordAttack):
     def __init__(self, known: Dataset, known_frequencies: np.ndarray = None, chosen_keywords: List[str] = None, query_log: KeywordQueryLog = None, alpha:float = 0.0, niters:int=1000, pct_free:float=0.25, modify: bool = False):
         super(Ihop, self).__init__(known)
 
+        log.info(f"Setup {self.name()}")
+
         self._delta = known.sample_rate()
         self._known_volume = dict()
         self._known_response_length = dict()
@@ -250,7 +256,7 @@ class Ihop(KeywordAttack):
             return cost_matrix
 
         nqr = len(token_trace)
-        rep_to_kw = rep_to_kw = {rep: rep for rep in range(self._nkw)}
+        rep_to_kw = {rep: rep for rep in range(self._nkw)}
 
         if self._alpha == 0:
             Vobs = compute_Vobs(token_info, ndocs)
@@ -359,19 +365,43 @@ class Ihop(KeywordAttack):
         return pred
 
 
-class PerfectIhop(Ihop):
+class RelationalIhop(Ihop):
     """
-    Implements the IHOP attack from Oya & Kerschbaum for the relational setting
+    Implements the IHOP attack from Oya & Kerschbaum for the relational setting.
+    By default, the sampling estimator is used (can be slow in runtime)
     """
+
+    _est: RelationalEstimator
+    _ndocs: int
+    _Vexp: np.array  # if set, the default estimator is not used (set to use more efficient computations of Vexp)
+
     def __init__(self, known: Dataset, known_frequencies: np.ndarray = None, chosen_keywords: List[str] = None, query_log: KeywordQueryLog = None, alpha:float = 0.0, niters:int=1000, pct_free:float=0.25, modify: bool = False):
-        super(PerfectIhop, self).__init__(known, known_frequencies, chosen_keywords, query_log, alpha, niters, pct_free, modify)
+        super(RelationalIhop, self).__init__(known, known_frequencies, chosen_keywords, query_log, alpha, niters, pct_free, modify)
+
+        if isinstance(known, SampledSQLRelationalDatabase):
+            full = known.parent()
+        else:
+            # dataset is not sampled, therefore whole dataset is known
+            full = known
+
+        self._est = self._get_estimator(known, full)
+
+        self._ndocs = len(full.doc_ids())
 
     @classmethod
     def name(cls) -> str:
-        return "Perfect-IHOP"
+        return "Relational-IHOP"
+
+    def _get_estimator(self, known, full):
+        return SamplingRelationalEstimator(known, full)
+
+    def _estimate_coocc(self, estimator: RelationalEstimator, q1: RelationalQuery, q2: RelationalQuery):
+        # estimator needs to output estimates based on the full dataset, otherwise we need to scale here
+        return estimator.estimate(q1, q2)
 
     def recover(self, dataset: Dataset, queries: Iterable[str]) -> List[str]:
-        ndocs = len(dataset)
+        log.info(f"Running {self.name()}")
+        ndocs = len(dataset.doc_ids())
         rid = ResponseIdentity()
         queries = list(queries)
         doc_ids = dataset.doc_ids()
@@ -383,21 +413,28 @@ class PerfectIhop(Ihop):
         token_trace, token_info = self.process_traces(rid(dataset, queries), doc_to_id)
 
         # Start relational estimator part
-        if not dataset.get_extension(CoOccurrenceExtension):
-            dataset.extend_with(CoOccurrenceExtension)
-        ide = dataset.get_extension(CoOccurrenceExtension)
+        if self._Vexp is None:
+            # default: compute each value of Vexp matrix using estimator
+            epsilon = 1e-20  # Value to control that there are no zero elements
+            known_keywords = list(self._known().keywords())
+            nkw = len(known_keywords)
+            Vexp = np.zeros((nkw, nkw))
+            for kw1 in known_keywords:
+                i_kw1 = known_keywords.index(kw1)
+                for kw2 in known_keywords:
+                    i_kw2 = known_keywords.index(kw2)
+                    estimation = self._estimate_coocc(self._est, kw1, kw2)
+                    if estimation > ndocs:
+                        # hungarian algorithm fails if value is > 1
+                        Vexp[i_kw1, i_kw2] = (ndocs + epsilon) / (ndocs + 2 * epsilon)
+                    else:
+                        Vexp[i_kw1, i_kw2] = (estimation + epsilon) / (ndocs + 2 * epsilon)
 
-        epsilon = 1e-20  # Value to control that there are no zero elements
-        known_keywords = list(self._known().keywords())
-        nkw = len(known_keywords)
-        Vexp = np.zeros((nkw, nkw))
-        for kw1 in known_keywords:
-            i_kw1 = known_keywords.index(kw1)
-            for kw2 in known_keywords:
-                i_kw2 = known_keywords.index(kw2)
-                Vexp[i_kw1, i_kw2] = (ide.co_occurrence(kw1, kw2) + epsilon) / (ndocs + 2 * epsilon)
-
-        compute_coef_matrix, rep_to_kw = self.get_update_coefficients_functions(token_trace, token_info, ndocs, Vexp)
+            compute_coef_matrix, rep_to_kw = self.get_update_coefficients_functions(token_trace, token_info, ndocs, Vexp)
+        else:
+            # use pre-defined Vexp matrix
+            compute_coef_matrix, rep_to_kw = self.get_update_coefficients_functions(token_trace, token_info, ndocs,
+                                                                                    self._Vexp)
 
         nrep = len(rep_to_kw)
         ntok = len(token_info)
@@ -446,3 +483,63 @@ class PerfectIhop(Ihop):
         # accuracy = np.mean(np.array([1 if real == prediction else 0 for real, prediction in zip(queries, pred)]))
         # print("IHOP_accuracy =",accuracy)
         return pred
+
+
+class PerfectRelationalIhop(RelationalIhop):
+    """
+    Implements the IHOP attack from Oya & Kerschbaum for the relational setting with perfect estimates (based on full
+    dataset).
+    """
+
+    def __init__(self, known: Dataset, known_frequencies: np.ndarray = None, chosen_keywords: List[str] = None, query_log: KeywordQueryLog = None, alpha:float = 0.0, niters:int=1000, pct_free:float=0.25, modify: bool = False):
+        super(PerfectRelationalIhop, self).__init__(known, known_frequencies, chosen_keywords, query_log, alpha, niters, pct_free, modify)
+
+        if isinstance(known, SampledSQLRelationalDatabase):
+            full = known.parent()
+        else:
+            # dataset is not sampled, therefore whole dataset is known
+            full = known
+
+        if not full.has_extension(IdentityExtension):
+            full.extend_with(IdentityExtension)
+        full_ide = full.get_extension(IdentityExtension)
+
+        # overwrite known ids with ids from full dataset (not just known dataset)
+        self._known_ids = dict()
+        for keyword in self._chosen_keywords:
+            self._known_ids[keyword] = full_ide.doc_ids(keyword)
+
+        # compute Vexp matrix based on full dataset (all documents, but only the known keywords)
+        self._Vexp = get_Vexp(full, self._known_ids, self._chosen_keywords)
+        log.info("Setup complete.")
+
+    @classmethod
+    def name(cls) -> str:
+        return "Perfect-Relational-IHOP"
+
+    def _get_estimator(self, known, full):
+        # not used, because too inefficient
+        return PerfectRelationalEstimator(known, full)
+
+
+class ErrorSimulationRelationalIhop(PerfectRelationalIhop):
+    """
+    Implements the IHOP attack from Oya & Kerschbaum for the relational setting
+    """
+
+    __mean_error: float
+
+    def __init__(self, known: Dataset, mean_error: float, known_frequencies: np.ndarray = None, chosen_keywords: List[str] = None, query_log: KeywordQueryLog = None, alpha:float = 0.0, niters:int=1000, pct_free:float=0.25, modify: bool = False):
+        super(ErrorSimulationRelationalIhop, self).__init__(known, known_frequencies, chosen_keywords, query_log, alpha, niters, pct_free, modify)
+        self.__mean_error = mean_error
+
+        # add error to Vexp matrix
+        error_matrix_size = (len(known.keywords()), len(known.keywords()))
+        gaussian_error = np.random.normal(loc=self.__mean_error, scale=0.1, size=error_matrix_size)
+        self._Vexp = np.multiply(self._Vexp, gaussian_error)  # element-wise multiplication
+        self._Vexp = np.minimum(self._Vexp, np.ones(error_matrix_size))
+        # TODO also use division
+
+    @classmethod
+    def name(cls) -> str:
+        return "ErrorSimulation-Relational-IHOP"
