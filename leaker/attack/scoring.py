@@ -171,20 +171,7 @@ class RelationalScoring(Countv2):
         for i in range(len(self._known_keywords)):
             for j in range(k):
                 est_cooc = estimator.estimate(self._known_keywords[i], known_queries[known_queries_pos[j]])
-                act_cooc = self._full_cooc_ext.co_occurrence(self._known_keywords[i],
-                                                              known_queries[known_queries_pos[j]])
                 coocc_s_kw[i][j] = est_cooc
-                errors.append(ErrorMetric(est_cooc, act_cooc))
-                if not (est_cooc == 0 and act_cooc == 1) and not (est_cooc == 1 and act_cooc == 0):
-                    errors_without_zero_one.append(ErrorMetric(est_cooc, act_cooc))
-
-        import csv
-        with open('error_logs/' + self.name() + '.csv', 'a') as fd:
-            row = [np.median(errors), np.quantile(errors, 0.95), np.quantile(errors, .99), np.max(errors),
-                   np.median(errors_without_zero_one), np.quantile(errors_without_zero_one, 0.95),
-                   np.quantile(errors_without_zero_one, .99), np.max(errors_without_zero_one)]
-            writer = csv.writer(fd)
-            writer.writerow(row)
 
         return coocc_s_kw
 
