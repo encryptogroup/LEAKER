@@ -112,6 +112,8 @@ class RelationalScoring(Countv2):
     _known_keywords: List[str]
     _est: RelationalEstimator
     _full_cooc_ext: CoOccurrenceExtension
+    _known_cooc_ext: CoOccurrenceExtension
+    _ndocs: int
 
     def __init__(self, known: Dataset, known_query_size: float = 0.15):
         super(RelationalScoring, self).__init__(known)
@@ -129,6 +131,8 @@ class RelationalScoring(Countv2):
             full.extend_with(CoOccurrenceExtension)
 
         self._full_cooc_ext = full.get_extension(CoOccurrenceExtension)
+        self._known_cooc_ext = known.get_extension(CoOccurrenceExtension)
+        self._ndocs = len(full.doc_ids())
         self._est = self._get_estimator(known, full)
 
     @classmethod
@@ -248,6 +252,44 @@ class ErrorSimulationRelationalScoring(RelationalScoring):
                     coocc_s_kw[i][j] = simulated_cooc
                 else:
                     coocc_s_kw[i][j] = perfect_cooc
+
+        return coocc_s_kw
+
+
+class AdditiveErrorSimulationRelationalScoring(RelationalScoring):
+    """
+    Basic Scoring attack that can be used with estimators
+    """
+    __mean_error: float
+
+    def __init__(self, known: Dataset, mean_error: float, known_query_size: float = 0.15):
+        super(AdditiveErrorSimulationRelationalScoring, self).__init__(known, known_query_size)
+        self.__mean_error = mean_error
+
+    @classmethod
+    def name(cls) -> str:
+        return "AdditiveErrorSimulationRelationalScoring"
+
+    def _build_cooc_s_kw_matrix(self, estimator: RelationalEstimator, k: int, known_queries, known_queries_pos):
+        coocc_s_kw = np.zeros((len(self._known_keywords), k))
+        for i in range(len(self._known_keywords)):
+            for j in range(k):
+                if self._known_cooc_ext.co_occurrence(self._known_keywords[i], known_queries[known_queries_pos[j]]) == 0:
+                    coocc_s_kw[i][j] = 0.0
+                else:
+                    perfect_cooc = self._full_cooc_ext.co_occurrence(self._known_keywords[i],
+                                                                  known_queries[known_queries_pos[j]])
+                    if self.__mean_error != 0.0:
+                        gaussian_error = np.random.normal(loc=self.__mean_error, scale=1, size=None)
+                        # additive error
+                        error_rows = gaussian_error
+                        if random.choice([0, 1]) == 0:
+                            simulated_cooc = perfect_cooc + error_rows
+                        else:
+                            simulated_cooc = perfect_cooc - error_rows
+                        coocc_s_kw[i][j] = simulated_cooc
+                    else:
+                        coocc_s_kw[i][j] = perfect_cooc
 
         return coocc_s_kw
 
@@ -525,6 +567,8 @@ class RelationalRefinedScoring(RefinedScoringAttack):
 
     _est: RelationalEstimator
     _full_cooc_ext: CoOccurrenceExtension
+    _known_cooc_ext: CoOccurrenceExtension
+    _ndocs: int
 
     def __init__(self, known: SQLRelationalDatabase, known_query_size: float = 0.15, ref_speed: int = 10):
         super(RelationalRefinedScoring, self).__init__(known, known_query_size, ref_speed)
@@ -535,8 +579,10 @@ class RelationalRefinedScoring(RefinedScoringAttack):
             # dataset is not sampled, therefore whole dataset is known
             full = known
 
+        self._ndocs = len(full.doc_ids())
         self._est = self._get_estimator(known, full)
         self._full_cooc_ext = full.get_extension(CoOccurrenceExtension)
+        self._known_cooc_ext = known.get_extension(CoOccurrenceExtension)
 
     @classmethod
     def name(cls) -> str:
@@ -661,14 +707,47 @@ class ErrorSimulationRelationalRefinedScoring(PerfectRelationalRefinedScoring):
     def name(cls) -> str:
         return "ErrorSimulationRelationalRefinedScoring"
 
-    def _estimate_coocc(self, estimator: RelationalEstimator, q1: RelationalQuery, q2: RelationalQuery):
+    def _estimate_coocc(self, estimator: RelationalEstimator, q1: RelationalQuery, q2: RelationalQuery) -> float:
         perfect_cooc = self._full_cooc_ext.co_occurrence(q1, q2)
         if self.__mean_error != 1.0:
             gaussian_error = np.random.normal(loc=self.__mean_error, scale=0.1, size=None)
+            #simulated_cooc = perfect_cooc * gaussian_error
             if random.choice([0, 1]) == 0:  # try to simulate max inversion
                 simulated_cooc = perfect_cooc * gaussian_error
             else:
                 simulated_cooc = perfect_cooc / gaussian_error
+            return simulated_cooc
+        else:
+            return perfect_cooc
+
+
+class AdditiveErrorSimulationRelationalRefinedScoring(PerfectRelationalRefinedScoring):
+    """
+    Basic Scoring attack that can be used with estimators
+    """
+    __mean_error: float
+
+    def __init__(self, known: SQLRelationalDatabase, mean_error: float, known_query_size: float = 0.15, ref_speed: int = 10):
+        super(AdditiveErrorSimulationRelationalRefinedScoring, self).__init__(known, known_query_size, ref_speed)
+        self.__mean_error = mean_error
+
+    @classmethod
+    def name(cls) -> str:
+        return "AdditiveErrorSimulationRelationalRefinedScoring"
+
+    def _estimate_coocc(self, estimator: RelationalEstimator, q1: RelationalQuery, q2: RelationalQuery) -> float:
+        perfect_cooc = self._full_cooc_ext.co_occurrence(q1, q2)
+        if self._known_cooc_ext.co_occurrence(q1, q2) == 0:
+            return 0.0
+        if self.__mean_error != 0.0:
+            gaussian_error = np.random.normal(loc=self.__mean_error, scale=1, size=None)
+
+            # additive error
+            error_rows = gaussian_error
+            if random.choice([0, 1]) == 0:
+                simulated_cooc = perfect_cooc + error_rows
+            else:
+                simulated_cooc = perfect_cooc - error_rows
             return simulated_cooc
         else:
             return perfect_cooc
