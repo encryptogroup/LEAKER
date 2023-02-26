@@ -68,7 +68,8 @@ class CoOccurrenceExtension(SelectivityExtension):
             else:
                 self.__doc_id_dict = original_doc_id_dict
 
-            if original_coocc_cache is not None:
+            if original_coocc_cache is not None and not isinstance(dataset, RelationalDatabase):
+                # if relational: building a new extension is cheaper than sampling it
                 log.debug(f"Subsampling CoOccurrence Cache for '{dataset.name()}'")
                 self.__coocc_cache = original_coocc_cache
                 self.__is_sampled = True
