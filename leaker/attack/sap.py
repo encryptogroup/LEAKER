@@ -12,7 +12,6 @@ from scipy.optimize import linear_sum_assignment as hungarian
 from leaker.extension import identity
 from .relational_estimators.estimator import NaruRelationalEstimator, SamplingRelationalEstimator, RelationalEstimator, \
     KDERelationalEstimator, PerfectRelationalEstimator
-from .relational_estimators.eval import ErrorMetric
 from ..api import Extension, KeywordAttack, Dataset, LeakagePattern, RelationalDatabase, RelationalQuery, KeywordQueryLog
 from ..extension import VolumeExtension, SelectivityExtension, IdentityExtension
 from ..pattern import ResponseLength, TotalVolume, Frequency, ResponseIdentity
@@ -269,9 +268,6 @@ class RelationalSap(KeywordAttack):
         return SamplingRelationalEstimator(known, full)
 
     def _perform_estimation(self, estimator: RelationalEstimator, known: SQLRelationalDatabase, n: int):
-        errors = []
-        errors_without_zero_one = []
-
         i = 0
         for keyword in known.keywords():
             self._known_keywords[i] = keyword
@@ -279,19 +275,6 @@ class RelationalSap(KeywordAttack):
             i += 1
             est_rlen = round(estimator.estimate(keyword))
             self._known_response_length[keyword] = est_rlen
-
-            act_rlen = len(self.full_id_extension.doc_ids(keyword))
-            errors.append(ErrorMetric(est_rlen, act_rlen))
-            if not (est_rlen == 0 and act_rlen == 1) and not (est_rlen == 1 and act_rlen == 0):
-                errors_without_zero_one.append(ErrorMetric(est_rlen, act_rlen))
-
-        import csv
-        with open('error_logs/' + self.name() + '.csv', 'a') as fd:
-            row = [np.median(errors), np.quantile(errors, 0.95), np.quantile(errors, .99), np.max(errors),
-                   np.median(errors_without_zero_one), np.quantile(errors_without_zero_one, 0.95),
-                   np.quantile(errors_without_zero_one, .99), np.max(errors_without_zero_one)]
-            writer = csv.writer(fd)
-            writer.writerow(row)
 
     @classmethod
     def name(cls) -> str:
