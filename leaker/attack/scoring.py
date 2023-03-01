@@ -1,7 +1,7 @@
 """
 For License information see the LICENSE file.
 
-Authors: Amos Treiber
+Authors: Amos Treiber, Patrick Ehrler
 
 """
 import random
@@ -13,7 +13,6 @@ import numpy as np
 from .count import Countv2
 from .relational_estimators.estimator import NaruRelationalEstimator, SamplingRelationalEstimator, RelationalEstimator, \
     PerfectRelationalEstimator
-from .relational_estimators.eval import ErrorMetric
 from .relational_estimators.uae_estimator import UaeRelationalEstimator
 from ..api import Dataset, LeakagePattern, Extension, RelationalQuery
 from ..extension import CoOccurrenceExtension
@@ -164,9 +163,6 @@ class RelationalScoring(Countv2):
         return SamplingRelationalEstimator(known, full)
 
     def _build_cooc_s_kw_matrix(self, estimator: RelationalEstimator, k: int, known_queries, known_queries_pos):
-        errors = []
-        errors_without_zero_one = []
-
         coocc_s_kw = np.zeros((len(self._known_keywords), k))
         for i in range(len(self._known_keywords)):
             for j in range(k):
