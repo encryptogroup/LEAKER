@@ -388,6 +388,8 @@ class RelationalIhop(Ihop):
 
         self._ndocs = len(full.doc_ids())
 
+        self._Vexp = get_Vexp(known, self._known_ids, self._chosen_keywords)
+
     @classmethod
     def name(cls) -> str:
         return "Relational-IHOP"
