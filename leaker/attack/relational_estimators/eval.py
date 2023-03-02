@@ -206,7 +206,7 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, sel=Selectivity.Independent,
     plt.title('dataset=' + str(mimic_db.name()) + ', cooc=' + str(use_cooc) + ', nr_of_evals=' + str(
         nr_of_evals) + ', nr_of_queries=' + str(nr_of_queries) +
               ', ignore_zero_one=False')
-    sns_plot.figure.savefig("estimators.png", bbox_inches='tight')
+    sns_plot.figure.savefig("estimators.png", bbox_inches='tight', dpi=1200)
     plt.figure()
 
     if ignore_zero_one:
@@ -216,7 +216,7 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, sel=Selectivity.Independent,
         plt.title('dataset=' + str(mimic_db.name()) + ', cooc=' + str(use_cooc) + ', nr_of_evals=' + str(
             nr_of_evals) + ', nr_of_queries=' + str(nr_of_queries) +
                   ', ignore_zero_one=' + str(ignore_zero_one))
-        sns_plot_ignored.figure.savefig("estimators_zero_one.png", bbox_inches='tight')
+        sns_plot_ignored.figure.savefig("estimators_zero_one.png", bbox_inches='tight', dpi=1200)
 
     mimic_db.close()
 
