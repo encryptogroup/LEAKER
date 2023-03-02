@@ -20,7 +20,7 @@ f = logging.Formatter(fmt='{asctime} {levelname:8.8} {process} --- [{threadName:
 console = logging.StreamHandler(sys.stdout)
 console.setFormatter(f)
 
-file = logging.FileHandler('relational_dmv_indexing.log', 'w', 'utf-8')
+file = logging.FileHandler('relational_mimiciv_indexing.log', 'w', 'utf-8')
 file.setFormatter(f)
 
 logging.basicConfig(handlers=[console, file], level=logging.DEBUG)
