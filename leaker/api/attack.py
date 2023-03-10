@@ -1,11 +1,11 @@
 """
 For License information see the LICENSE file.
 
-Authors: Johannes Leupold
+Authors: Johannes Leupold, Patrick Ehrler
 
 """
 from abc import abstractmethod, ABC
-from typing import Any, List, Iterable, Generic, Type, TypeVar, Mapping, Set, Union
+from typing import Any, List, Iterable, Generic, Type, TypeVar, Mapping, Set, Union, Tuple
 
 from .dataset import Dataset, Extension
 from .range_database import RangeDatabase
@@ -227,3 +227,38 @@ class RangeAttack(Attack):
 
     def db(self) -> RangeDatabase:
         return self.__db
+
+
+class L2KeywordDocumentAttack(Attack):
+    """
+    Class for L2 Keyword Document attacks.
+    """
+
+    __encrypted_data: Dataset
+
+    def __init__(self, encrypted_data: Dataset, **kwargs):
+        self.__encrypted_data = encrypted_data
+
+    def _encrypted(self):
+        return self.__encrypted_data
+
+    @abstractmethod
+    def recover(self, known_dataset: Dataset, known_queries: List[str]) -> \
+            Tuple[Set[Tuple[str, str]], Set[Tuple[str, str]]]:
+        """
+        This attack recovers keywords and documents based on a partially known dataset and L2 leakage
+
+        Parameters
+        ----------
+        known_dataset : Dataset
+            the known data set to use
+        known_queries: Iterable[str]
+            queries that are observed by the attacker
+
+        Returns
+        -------
+        recover : Tuple[Set[Tuple[str, str]], Set[Tuple[str, str]]]
+            recovered keywords and documents
+            if just document or keyword recovery, then return None as second value
+        """
+        raise NotImplementedError

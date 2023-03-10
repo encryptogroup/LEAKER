@@ -16,6 +16,7 @@ from .glmp19 import ApproxValue, ApproxOrder
 from .glmp18 import GLMP18
 from .dummy import RangeBaselineAttack, RangeCountBaselineAttack
 from .gjw import GJWbasic, GJWspurious, GJWmissing, GJWpartial
+from .score import Score, RefinedScore
 from .scoring import ScoringAttack, RefinedScoringAttack, NaruRelationalScoring
 from .sap import Sap
 from .ihop import Ihop
@@ -53,6 +54,8 @@ __all__ = [
     'RangeBaselineAttack', 'RangeCountBaselineAttack',  # dummy.py
 
     'GJWbasic', 'GJWspurious',  'GJWmissing', 'GJWpartial',  # gjw.py
+    
+    'Score', 'RefinedScore',  # score.py
 
     'ScoringAttack', 'RefinedScoringAttack', 'NaruRelationalScoring'  # scoring.py
 
