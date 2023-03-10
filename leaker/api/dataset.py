@@ -5,12 +5,15 @@ Authors: Johannes Leupold
 
 """
 import os
+import random
+import numpy as np
 from abc import ABC, abstractmethod
 from logging import getLogger
-from typing import Iterator, Set, TypeVar, Type, Dict, List, Iterable, Optional, Union
+from typing import Iterator, Set, TypeVar, Type, Dict, List, Iterable, Optional, Union, Tuple
 
 from .constants import PICKLE_DIRECTORY, Selectivity
 from .document import Document
+from ..cache import Cache
 
 log = getLogger(__name__)
 
@@ -227,7 +230,7 @@ class Data(ABC):
     def __len__(self) -> int:
         return len(list(self.documents()))
 
-    def __enter__(self) -> 'Dataset':
+    def __enter__(self) -> 'Data':
         return self.open()
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
@@ -269,6 +272,20 @@ class Dataset(Data):
         on a sampled data set, the sampled fraction returned should be calculated with respect to the size of the
         full data set. This method is used to sample base data sets to known data rates to simulate partial knowledge of
         the full data set.
+
+        Parameters
+        ----------
+        rate : float
+            the sample rate in [0, 1]
+        """
+        raise NotImplementedError
+    
+    @abstractmethod
+    def sample_test_training(self, rate: float) -> Tuple['Dataset','Dataset']:
+        """
+        Samples this data set to the given percentage. The rate must be in [0.1, 0.9]. Other values must be rejected by
+        this method. This method is used to generate disjunct test and training data sets from a base data sets to a given rate
+        to simulate knowledge of a statisitcally close dataset.
 
         Parameters
         ----------
@@ -447,3 +464,141 @@ class KeywordQueryLog(Data):
 
     def __call__(self, user_id: str) -> Iterator[str]:
         yield from self.keywords_list(user_id)
+
+
+class DummyKeywordQueryLogFromTrends(KeywordQueryLog):
+    """Simulates a log by taking a list of queries"""
+    __name: str
+    __keywords_list: List[str]
+    __keywords_trends: dict
+    __frequencies: np.ndarray
+    __n_kw: int
+    __weeks: Tuple[int]
+    __offset: int
+    __selectivity: Selectivity
+    __n_queries_per_week: int
+    __chosen_keywords: List[str] = None
+    __p: float
+
+    def __init__(self, name: str, keywords_trends: dict, n_kw: int, weeks: Tuple[int], offset:int=0, n_queries_per_week: int = 5, selectivity: Selectivity=Selectivity.High, p: float = 1.0):
+        self.__name = name
+        self.__keywords_list = list(keywords_trends.keys())
+        self.__keywords_trends = keywords_trends
+        assert offset >=0 and weeks[0]-offset >=0 and weeks[0] < weeks[1] and weeks[1] <= len(keywords_trends), f"The weeks can only range from 0 to {len(keywords_trends)}"
+        self.__weeks = weeks
+        self.__offset = offset
+        self.__selectivity = selectivity
+        self.__n_queries_per_week = n_queries_per_week
+        assert n_kw <= len(self.__keywords_list), f"The number of keywords to choose has to be smaller than {len(self.__keywords_list)}."
+        self.__n_kw = n_kw
+        self.__frequencies = self._trend_matrix()
+        self.__p = p
+        
+        
+        
+
+    def name(self) -> str:
+        return self.__name
+
+    def user_ids(self) -> List[str]:
+        return ["0"]
+
+    def keywords_list(self, user_id: str = None, remove_endstates: bool = False) -> List[str]:
+        # Ignores user_id and remove_endstates and instead just yield the initially supplied list.
+        return self.__keywords_list
+    
+    def chosen_keywords(self):
+        return self.__chosen_keywords
+    
+    def _choose_keywords(self):
+        if self.__selectivity == Selectivity.High:
+            chosen_keywords = sorted(self.__keywords_trends.keys(), key=lambda x: self.__keywords_trends[x]['count'], reverse=True)[:self.__n_kw]
+        elif self.__selectivity == Selectivity.Low:
+            chosen_keywords = sorted(self.__keywords_trends.keys(), key=lambda x: self.__keywords_trends[x]['count'])[:self.__n_kw]
+        elif self.__selectivity == Selectivity.Independent:
+            chosen_keywords = random.sample(self.__keywords_trends.keys(),self.__n_kw)
+        else:
+            log.error(f"Unknown selectivity: {self.__selectivity}")
+        self.__chosen_keywords = chosen_keywords
+        return chosen_keywords
+    
+    def _trend_matrix(self,chosen_keywords:list=None):
+        if chosen_keywords is None:
+            chosen_keywords = self._choose_keywords()
+            self.__chosen_keywords = chosen_keywords
+        trend_matrix = np.array([self.__keywords_trends[kw]['trend'] for kw in chosen_keywords])
+        n_kw, n_weeks = trend_matrix.shape
+        for i_col in range(n_weeks):
+            if sum(trend_matrix[:,i_col]) == 0:
+                trend_matrix[:,i_col] = 1/n_kw
+            else:
+                trend_matrix[:,i_col] = trend_matrix[:,i_col] / sum(trend_matrix[:,i_col])
+        return trend_matrix
+
+    def generate_queries(self):
+        queries = []
+        if self.__p < 1:
+            self.__n_kw = int(100/self.__p)
+            chosen_keywords = self._choose_keywords()
+        elif self.__chosen_keywords is None:
+            chosen_keywords = self._choose_keywords()
+        else:
+            chosen_keywords = self.__chosen_keywords
+        for week in range(*self.__weeks):
+            query_prob = self._trend_matrix(chosen_keywords)[:,week]
+            queries += list(np.random.choice(chosen_keywords, self.__n_queries_per_week, p=query_prob))
+        return queries
+
+    def frequencies(self):
+        return self.__frequencies[:,self.__weeks[0]-self.__offset:self.__weeks[1]-self.__offset]
+
+    def open(self) -> 'Dataset':
+        return self
+
+    def close(self) -> None:
+        pass
+
+    def doc_ids(self) -> Set[str]:
+        return []
+
+    def documents(self) -> Iterator[Document]:
+        pass
+
+    def is_open(self) -> bool:
+        return True
+
+    def pickle(self) -> None:
+        pass
+
+    def query(self, keyword: str) -> Union[Iterator[Document], Iterator[str]]:
+        pass
+
+
+class SampledKeywordQueryLog(KeywordQueryLog):
+
+    __name: str
+    __keyword_cache: Cache[str, List[str]]
+    __keywords_list: List[str]
+    __user_ids: List[str]
+
+    def __init__(self, name: str, keyword_cache: Cache):
+        self.__name = name
+        self.__keyword_cache = keyword_cache
+        self.__keywords_list = [kw for keywords in self.__keyword_cache.values() for kw in keywords]
+        self.__user_ids = self.__keyword_cache.keys()
+        super().__init__()
+    
+    def name(self) -> str:
+        return self.__name
+
+    def query(self, user_id: str) -> Iterator[str]:
+        yield from self.__keyword_cache[user_id]
+
+    def user_ids(self) -> List[str]:
+        return self.__user_ids
+
+    def keywords_list(self, user_id: str = None) -> List[str]:
+        if user_id is None:
+            return self.__keywords_list
+        else:
+            return list(self.query(user_id))

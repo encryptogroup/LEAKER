@@ -10,6 +10,7 @@ from typing import Any, List, Iterable, Generic, Type, TypeVar, Mapping, Set, Un
 from .dataset import Dataset, Extension
 from .range_database import RangeDatabase
 from .leakage_pattern import LeakagePattern
+from .relational_database import RelationalDatabase, RelationalQuery, RelationalKeyword
 
 E = TypeVar("E", bound=Extension, covariant=True)
 
@@ -100,7 +101,7 @@ class AttackDefinition(ABC, Generic[T]):
         """
         return self.__cls.name()
 
-    def create(self, db: Union[Dataset, RangeDatabase]) -> T:
+    def create(self, db: Union[Dataset, RangeDatabase], *args) -> T:
         """
         Creates a concrete instance of the described attack by using the given data set.
 
@@ -114,7 +115,7 @@ class AttackDefinition(ABC, Generic[T]):
         create : T
             the attack instance built on the data
         """
-        return self.__cls(db, **self.__additional_args)
+        return self.__cls(db, *args, **self.__additional_args)
 
     def required_extensions(self) -> Set[Type[E]]:
         """
@@ -170,6 +171,34 @@ class KeywordAttack(Attack):
         Returns
         -------
         recover : List[str]
+            the recovered queries
+        """
+        raise NotImplementedError
+
+
+class RelationalAttack(KeywordAttack):
+    """
+    Class for relational attacks.
+    """
+
+    def __init__(self, known: RelationalDatabase, **kwargs):
+        super().__init__(known, **kwargs)
+
+    @abstractmethod
+    def recover(self, dataset: RelationalDatabase, queries: Iterable[RelationalQuery]) -> List[RelationalKeyword]:
+        """
+        Attacks the supplied query sequence on the given data set.
+
+        Parameters
+        ----------
+        dataset : RelationalDatabase
+            the data set to use
+        queries : Iterable[RelationalQuery]
+            the query sequence
+
+        Returns
+        -------
+        recover : List[RelationalKeyword]
             the recovered queries
         """
         raise NotImplementedError

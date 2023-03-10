@@ -4,6 +4,7 @@ For License information see the LICENSE file.
 Authors: Johannes Leupold, Amos Treiber, Patrick Ehrler
 
 """
+import math
 import os
 from abc import ABC
 from typing import List, Dict, Optional, Iterator, Tuple
@@ -31,12 +32,14 @@ class MatPlotLibSink(DataSink, ABC):
         default: None
     """
     __markers: List[str]
+    _metric: Dict[float, float]
 
     _out_file: Optional[str]
     __data: Dict[str, Dict[int, Dict[float, List[float]]]]
 
-    def __init__(self, out_file: Optional[str] = None, markers: Optional[List[str]] = None):
+    def __init__(self, out_file: Optional[str] = None, markers: Optional[List[str]] = None, metric: Optional[Dict[float,float]] = []):
         self.__markers = markers or ['x', 'o', 's', 'D', '|', '+']
+        self._metric = metric
         self._out_file = out_file
         if self._out_file is not None:
             if self._out_file.count('.') > 1:
@@ -109,7 +112,6 @@ class KeywordMatPlotLibSink(MatPlotLibSink):
             tikzplotlib.save(f"{self._out_file[:-4]}.tikz")
         else:
             plt.show()
-
 
 class KeywordDocumentMatPlotLibSink(DataSink, ABC):
     """
@@ -214,10 +216,81 @@ class KeywordDocumentMatPlotLibSink(DataSink, ABC):
         axes[0].legend()
         axes[1].legend()
 
+
+class ErrorSimulationRelationalMatPlotLibSink(MatPlotLibSink):
+    """Uses the median of reconstruction rates"""
+    def flush(self) -> None:
+        plt.figure(dpi=300)
+
+        plt.ylabel('Recovery Rate')
+        plt.ylim(0, 1.05)
+        plt.yticks(np.linspace(0, 1, num=6))
+
+        plt.grid(True)
+
+        x_max = 2
+
+        for x, y, series_id, y_min, y_max, marker in self.yield_plotpoints():
+            if max(x) > x_max:
+                x_max = max(x)
+
+            if not y_max.any() and not y_min.any():
+                plt.plot(x, y, label=series_id, marker=marker, linewidth=1)
+            else:
+                plt.errorbar(x, y, yerr=[y_min, y_max], label=series_id, marker=marker,
+                             linewidth=1, capsize=3)
+
+        plt.xlabel('Avg Q-Error')
+        plt.xlim(0.95, x_max + 0.05)
+        plt.xticks(np.linspace(1, math.ceil(x_max), num=math.ceil(math.ceil(x_max)/0.5)-1))
+
+        plt.legend()
+
         if self._out_file is not None:
             if not os.path.exists(FIGURE_DIRECTORY):
                 os.makedirs(FIGURE_DIRECTORY)
-            fig.savefig(self._out_file, dpi=300)
+            plt.savefig(self._out_file)
+            import tikzplotlib
+            tikzplotlib.save(f"{self._out_file[:-4]}.tikz")
+        else:
+            plt.show()
+
+class SampledMatPlotLibSink(MatPlotLibSink):
+    """Uses the median of reconstruction rates"""
+    def flush(self) -> None:
+        plt.figure(dpi=300)
+
+        plt.xlabel('Sample Size in %')
+        plt.xlim(-2, 52)
+        plt.xticks(np.linspace(0, 50, num=6))
+
+        plt.ylabel('Recovery Rate')
+        plt.ylim(0, 1.05)
+        plt.yticks(np.linspace(0, 1, num=6))
+
+        plt.grid(True)
+
+        for x, y, series_id, y_min, y_max, marker in self.yield_plotpoints():
+            if len(self._metric) > 0:
+                assert(len(x) == len(self._metric))
+                x = np.array([self._metric[key] for key in x])
+                plt.xlabel('Statistical Closeness in %')
+                plt.xlim(45,105)
+                plt.xticks(np.linspace(50, 100, num=6))
+
+            if not y_max.any() and not y_min.any():
+                plt.plot(x * 100, y, label=series_id, marker=marker, linewidth=1)
+            else:
+                plt.errorbar(x * 100, y, yerr=[y_min, y_max], label=series_id, marker=marker,
+                             linewidth=1, capsize=3)
+
+        plt.legend()
+
+        if self._out_file is not None:
+            if not os.path.exists(FIGURE_DIRECTORY):
+                os.makedirs(FIGURE_DIRECTORY)
+            plt.savefig(self._out_file)
+            
             import tikzplotlib
             tikzplotlib.save(f"{self._out_file[:-4]}.tikz")
         else:

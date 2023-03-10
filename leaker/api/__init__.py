@@ -1,6 +1,6 @@
-from .attack import Attack, AttackDefinition, KeywordAttack, RangeAttack
+from .attack import Attack, AttackDefinition, KeywordAttack, RangeAttack, RelationalAttack
 from .backend import Backend
-from .dataset import Dataset, Extension, KeywordQueryLog, Data
+from .dataset import Dataset, Extension, KeywordQueryLog, DummyKeywordQueryLogFromTrends, Data
 from .document import Document, InputDocument, QueryInputDocument
 from .leakage_pattern import LeakagePattern
 from .query_space import QuerySpace, KeywordQuerySpace, RangeQuerySpace
@@ -9,13 +9,14 @@ from .range_database import RangeDatabase, RandomRangeDatabase, RegularRangeData
     BaseRangeDatabase, PermutedBetaRandomRangeDatabase, BTRangeDatabase, ABTRangeDatabase, RangeQueryLog
 from .range import Range
 from .sink import DataSink
+from .relational_database import RelationalDatabase, RelationalQuery, RelationalKeyword
 
 __all__ = [
-    'Attack', 'AttackDefinition', 'KeywordAttack', 'RangeAttack',  # attack.py
+    'Attack', 'AttackDefinition', 'KeywordAttack', 'RangeAttack', 'RelationalAttack',  # attack.py
 
     'Backend',  # backend.py
 
-    'Data', 'Dataset', 'Extension', 'KeywordQueryLog',  # dataset.py
+    'Data', 'Dataset', 'Extension', 'KeywordQueryLog', 'DummyKeywordQueryLogFromTrends', # dataset.py
 
     'RangeDatabase', 'RandomRangeDatabase', 'RegularRangeDatabase', 'QDRangeDatabase', 'BaseRangeDatabase',
     'PermutedBetaRandomRangeDatabase', 'BTRangeDatabase', 'ABTRangeDatabase', 'RangeQueryLog',  # range_database.py
@@ -31,4 +32,6 @@ __all__ = [
     'Range',  # range.py
 
     'DataSink',  # sink.py
+
+    'RelationalDatabase', 'RelationalQuery', 'RelationalKeyword',  # relational_database.py
 ]

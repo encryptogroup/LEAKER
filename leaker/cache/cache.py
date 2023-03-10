@@ -34,6 +34,10 @@ class Cache(Generic[A, T], Mapping[A, T]):
 
         return val
 
+    def __contains__(self, item: A) -> bool:
+        """Denotes if item has been cached already or would be computed if accessed"""
+        return item in self.__cache.keys()
+
     def __getitem__(self, key: A) -> T:
         return self.compute_if_absent(key)
 
@@ -78,6 +82,13 @@ class Cache(Generic[A, T], Mapping[A, T]):
             return cls(dict(), accessor)
 
         return cls(cls.__build(accessor, keys, max_elements), accessor)
+
+    @classmethod
+    def sample(cls, sample_rate):
+        split_point = int(cls.__len__()*sample_rate)
+        training_cache = {A:T for (A,T) in [elem for elem in cls.__cache.items()][:split_point]}
+        testing_cache = {A:T for (A,T) in [elem for elem in cls.__cache.items()][split_point:]}
+        return cls(training_cache,cls.__accessor), cls(testing_cache,cls.__accessor)
 
     def pickle(self, filename: str) -> None:
         """

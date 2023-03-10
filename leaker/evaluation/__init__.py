@@ -1,13 +1,13 @@
-from .evaluator import Evaluator, KeywordAttackEvaluator, RangeAttackEvaluator
-from .param import EvaluationCase, DatasetSampler, QuerySelector
+from .evaluator import Evaluator, KeywordAttackEvaluator, RangeAttackEvaluator, RelationalAttackEvaluator
+from .param import EvaluationCase, KnownDatasetSampler, SampledDatasetSampler, QuerySelector
 from .errors import Error, MSError, MAError, MSDError, MaxASymError, MaxABucketError, CountSError, CountAError, \
     CountPartialVolume, SetCountAError, OrderedMAError, OrderedMSError
 
 
 __all__ = [
-    'Evaluator', 'KeywordAttackEvaluator', 'RangeAttackEvaluator',  # evaluator.py
+    'Evaluator', 'KeywordAttackEvaluator', 'RangeAttackEvaluator', 'RelationalAttackEvaluator',  # evaluator.py
 
-    'EvaluationCase', 'DatasetSampler', 'QuerySelector',  # range.py
+    'EvaluationCase', 'KnownDatasetSampler', 'SampledDatasetSampler', 'QuerySelector',  # range.py
 
     'Error', 'MSError', 'MAError', 'MSDError', 'MaxASymError', 'MaxABucketError', 'CountSError',
     'CountAError', 'CountPartialVolume', 'SetCountAError', 'OrderedMAError', 'OrderedMSError',  # error.py

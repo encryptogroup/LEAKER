@@ -11,7 +11,7 @@ from typing import List, Iterable, Union, Type, Dict, Optional, Iterator, Tuple,
 
 from .errors import Error, MAError
 from ..api import AttackDefinition, Dataset, QuerySpace, KeywordQuerySpace, Selectivity, Attack, RangeDatabase,\
-    Extension, KeywordQueryLog
+    Extension, KeywordQueryLog, RelationalDatabase
 
 log = getLogger(__name__)
 
@@ -28,7 +28,7 @@ class EvaluationCase:
     attacks: Union[AttackDefinition, Type[Attack], Iterable[Union[AttackDefinition, Type[Attack]]]]
         may be one or multiple elements of which each can be the type of an attack (i.e. a subclass of Attack) or an
         AttackDefinition (for example when specifying additional parameters)
-    dataset: Union[Dataset, RangeDatabase]
+    dataset: Union[Dataset, RangeDatabase, RelationalDatabase]
         the data set to evaluate the attacks on
     runs: int
         the number of runs of sampling new datasets for the kdr
@@ -41,8 +41,8 @@ class EvaluationCase:
         default: None
     base_restrictions_repetitions: int
         how often an evaluation will be performed with fresh restricted base datasets
-        => EvaluationCase.runs() runs for base_restrictions_repetitions new restriced base data sets in
-        base_restriction_rates
+        => EvaluationCase.runs() runs for base_restrictions_repetitions new restricted base data sets in
+        base_restriction_rates or max_keywords
         default: 1
     max_keywords: int
         The keyword size to restrict the base dataset to (will only be performed if no restriction_rates are set)
@@ -64,7 +64,7 @@ class EvaluationCase:
     __error: Union[None, Type[Error]]
 
     def __init__(self, attacks: Union[AttackDefinition, Type[Attack], Iterable[Union[AttackDefinition, Type[Attack]]]],
-                 dataset: Union[Dataset, RangeDatabase], runs: int = 1, error: Type[Error] = None,
+                 dataset: Union[Dataset, RangeDatabase, RelationalDatabase], runs: int = 1, error: Type[Error] = None,
                  base_restriction_rates: Iterable[float] = None,
                  base_restrictions_repetitions: int = 1, max_keywords: int = 0,
                  selectivity: Selectivity = Selectivity.Independent, pickle_description: str = None):
@@ -84,7 +84,8 @@ class EvaluationCase:
             self.__datasets = [dataset.restrict_rate(rate) for rate in base_restriction_rates
                                for _ in range(base_restrictions_repetitions)]
         elif max_keywords != 0:
-            self.__datasets = [dataset.restrict_keyword_size(max_keywords, selectivity)]
+            self.__datasets = [dataset.restrict_keyword_size(max_keywords, selectivity)
+                               for _ in range(base_restrictions_repetitions)]
         else:
             self.__datasets = [dataset]
 
@@ -147,40 +148,32 @@ class DatasetSampler:
     monotonic : bool
         whether to apply monotonic sampling as described above
         default: False
+    table_samples : Iterable[Union[str, int]]
+        For relational evaluations: The names or identifiers of tables that should not be sampled, i.e., are known to
+        the adversary in full.
     """
     __kdr_samples: Iterable[float]
+    __table_samples: Iterable[Union[str, int]]
 
     __reuse: bool
     __sample_monotonic: bool
 
     __sample_cache: Dict[Tuple[Dataset, float], Dataset]
 
-    def __init__(self, kdr_samples: Iterable[float], reuse: bool = False, monotonic: bool = False):
+    def __init__(self, kdr_samples: Iterable[float], reuse: bool = False, monotonic: bool = False,
+                 table_samples: Iterable[Union[str, int]] = None):
         self.__reuse = reuse
         self.__sample_monotonic = monotonic
 
         self.__kdr_samples = kdr_samples
+        self.__table_samples = table_samples
 
         self.__sample_cache = dict()
 
-    def __sample(self, dataset: Dataset, pool: Optional[Pool]) -> Iterator[Tuple[float, Dataset]]:
-        sorted_samples = sorted(self.__kdr_samples, reverse=True)
-        prev: Dataset = dataset
+    def create_samples(self, dataset: Dataset, pool: Optional[Pool]) -> Iterator[Tuple[float, Dataset]]:
+        raise NotImplementedError
 
-        if pool is None or self.__sample_monotonic:
-            for kdr in sorted_samples:
-                if self.__sample_monotonic:
-                    sampled = prev.sample(kdr)
-                    prev = sampled
-                else:
-                    sampled = dataset.sample(kdr)
-
-                yield kdr, sampled
-        else:
-            yield from iter(pool.starmap(func=lambda rate: (rate, dataset.sample(rate)),
-                                         iterable=map(lambda rate: (rate,), sorted_samples)))
-
-    def sample(self, datasets: Iterable[Dataset], pool: Optional[Pool] = None)\
+    def sample(self, datasets: Iterable[Dataset], pool: Optional[Pool] = None) \
             -> Iterator[Tuple[Dataset, float, Dataset]]:
         """
         Yields sub samples of the given data set for the configured known data rates.
@@ -195,11 +188,19 @@ class DatasetSampler:
         if not self.__reuse or len(self.__sample_cache) == 0:
             for dataset in datasets:
                 log.info(f"Sampling dataset '{dataset.name()}' to configured known data rates")
-                for kdr, sampled in self.__sample(dataset, pool):
-                    if self.__reuse:
-                        self.__sample_cache[(dataset, kdr)] = sampled
+                for kdr, sampled in self.create_samples(dataset, pool):
+                    if isinstance(sampled,tuple):
+                        training_set, test_set = sampled
+                        if self.__reuse:
+                            self.__sample_cache[(test_set, kdr)] = training_set
 
-                    yield dataset, kdr, sampled
+                        yield test_set, kdr, training_set
+
+                    else:
+                        if self.__reuse:
+                            self.__sample_cache[(dataset, kdr)] = sampled
+
+                        yield dataset, kdr, sampled
         else:
             log.info("Reusing sampled datasets, no sampling necessary")
             yield from [(key[0], key[1], sampled) for key, sampled in self.__sample_cache.items()]
@@ -211,6 +212,111 @@ class DatasetSampler:
         """Sets reuse and removes the prior sample cache"""
         self.__reuse = reuse
         self.__sample_cache = dict()
+
+
+class KnownDatasetSampler(DatasetSampler):
+    """
+    A tool to provide sampled data sets for evaluation. It samples data sets for the specified known data rate values
+    and may reuse already sampled datasets or use monotonic sampling, i.e. sample data sets such that for each pair
+    d1, d2 of sampled data sets if kdr1 < kdr2, then d1 is a subset of d2.
+
+    Parameters
+    ----------
+    kdr_samples: Iterable[float]
+        the known data rate values to sample the dataset to
+    reuse : bool
+        whether to only sample once for each run (False) or to sample #runs times new queries for each run (True)
+        default: False
+    monotonic : bool
+        whether to apply monotonic sampling as described above
+        default: False
+    table_samples : Iterable[Union[str, int]]
+        For relational evaluations: The names or identifiers of tables that should not be sampled, i.e., are known to
+        the adversary in full.
+    """
+    __kdr_samples: Iterable[float]
+    __sample_monotonic: bool
+
+    def __init__(self, kdr_samples: Iterable[float], reuse: bool = False, monotonic: bool = False,
+                 table_samples: Iterable[Union[str, int]] = None):
+        super().__init__(kdr_samples, reuse, monotonic, table_samples)
+        self.__sample_monotonic = monotonic
+        self.__kdr_samples = kdr_samples
+
+        self.__kdr_samples = kdr_samples
+        self.__table_samples = table_samples
+
+        self.__sample_cache = dict()
+
+    def create_samples(self, dataset: Dataset, pool: Optional[Pool]) -> Iterator[Tuple[float, Dataset]]:
+        sorted_samples = sorted(self.__kdr_samples, reverse=True)
+        prev: Union[Dataset, RelationalDatabase] = dataset
+
+        if pool is None or self.__sample_monotonic or isinstance(dataset, RelationalDatabase):
+            # TODO: parallel relational sampling, currently disabled due to MySQL concurrency problems
+            for kdr in sorted_samples:
+                if isinstance(dataset, RelationalDatabase):
+                    kdr = (kdr, self.__table_samples)
+                else:
+                    kdr = (kdr,)
+                if self.__sample_monotonic:
+                    sampled = prev.sample(*kdr)
+                    prev = sampled
+                else:
+                    sampled = dataset.sample(*kdr)
+
+                yield kdr[0], sampled
+        else:
+            if isinstance(dataset, RelationalDatabase):
+                yield from iter(pool.starmap(func=lambda rate: (rate, dataset.sample(rate, self.__table_samples)),
+                                             iterable=map(lambda rate: (rate,), sorted_samples)))
+            else:
+                yield from iter(pool.starmap(func=lambda rate: (rate, dataset.sample(rate)),
+                                             iterable=map(lambda rate: (rate,), sorted_samples)))
+
+
+class SampledDatasetSampler(DatasetSampler):
+    """
+    A tool to provide sampled data sets for evaluation. It samples data sets for the specified known data rate values
+    and may reuse already sampled datasets or use monotonic sampling, i.e. sample data sets such that for each pair
+    d1, d2 of sampled data sets if kdr1 < kdr2, then d1 is a subset of d2.
+
+    Parameters
+    ----------
+    kdr_samples: Iterable[float]
+        the known data rate values to sample the dataset to
+    reuse : bool
+        whether to only sample once for each run (False) or to sample #runs times new queries for each run (True)
+        default: False
+    monotonic : bool
+        whether to apply monotonic sampling as described above
+        default: False
+    """
+    __kdr_samples: Iterable[float]
+    __training_set: Dataset = None
+
+    def __init__(self, kdr_samples: Iterable[float] = [0], reuse: bool = False, monotonic: bool = False, training_set: Dataset = None):
+        super().__init__(kdr_samples,reuse,monotonic)
+        self.__kdr_samples = kdr_samples
+        if training_set:
+            self.__training_set = training_set
+
+
+    def create_samples(self, dataset: Dataset, pool: Optional[Pool]) -> Iterator[Tuple[float, Dataset]]:
+        # TODO: not compatible with relational setting
+        if self.__training_set:
+            sampled = (self.__training_set, dataset)
+            yield 0, sampled
+        else:
+            sorted_samples = sorted(self.__kdr_samples, reverse=True)
+
+            if pool is None:
+                for kdr in sorted_samples:
+                    sampled = dataset.sample_test_training(kdr)
+                    yield kdr, sampled
+            else:
+                yield from iter(pool.starmap(func=lambda rate: (rate, dataset.sample_test_training(rate)),
+                                            iterable=map(lambda rate: (rate,), sorted_samples)))
 
 
 class QuerySelector:

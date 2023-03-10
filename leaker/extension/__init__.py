@@ -3,6 +3,7 @@ from .identity import IdentityExtension
 from .selectivity import SelectivityExtension
 from .volume import VolumeExtension
 from .cooccurrence import CoOccurrenceExtension
+from .pandas import PandasExtension
 
 __all__ = [
     'IdentityExtension',  # identity.py
@@ -14,4 +15,6 @@ __all__ = [
     'CoOccurrenceExtension',  # cooccurrence.py
 
     'DocOccurrenceExtension',  # dococcurrence.py
+
+    'PandasExtension',  # pandas.py
 ]

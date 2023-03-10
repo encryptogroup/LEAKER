@@ -5,7 +5,7 @@ from .query_space import FullQuerySpace, PartialQuerySpace, FullQueryLogSpace, P
 from .sel_vol_an import SelVolAn
 from .subgraph import SubgraphID, SubgraphVL
 from .vol_an import VolAn
-from .count import BasicCount, Countv2
+from .count import BasicCount, Countv2, EstimatorCount, AddEstimatorCount, NaruCount
 from .ikk import Ikk
 from .ikk_optimized import Ikkoptimized
 from .arr import Arr, Arrorder
@@ -17,6 +17,9 @@ from .glmp18 import GLMP18
 from .dummy import RangeBaselineAttack, RangeCountBaselineAttack
 from .gjw import GJWbasic, GJWspurious, GJWmissing, GJWpartial
 from .score import Score, RefinedScore
+from .scoring import ScoringAttack, RefinedScoringAttack, NaruRelationalScoring
+from .sap import Sap
+from .ihop import Ihop
 
 __all__ = [
     'FullQuerySpace', 'PartialQuerySpace', 'FullQueryLogSpace', 'PartialQueryLogSpace', 'FullUserQueryLogSpace',
@@ -30,7 +33,7 @@ __all__ = [
 
     'SubgraphID', 'SubgraphVL',  # subgraph.py
 
-    'BasicCount', 'Countv2',  # count.py
+    'BasicCount', 'Countv2', 'EstimatorCount', 'AddEstimatorCount', 'NaruCount'  # count.py
 
     'Ikk',  # ikk.py
 
@@ -53,4 +56,10 @@ __all__ = [
     'GJWbasic', 'GJWspurious',  'GJWmissing', 'GJWpartial',  # gjw.py
     
     'Score', 'RefinedScore',  # score.py
+
+    'ScoringAttack', 'RefinedScoringAttack', 'NaruRelationalScoring'  # scoring.py
+
+    'Sap',  # sap.py
+
+    'Ihop',  # ihop.py
 ]

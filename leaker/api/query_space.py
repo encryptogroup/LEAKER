@@ -7,13 +7,14 @@ Authors: Johannes Leupold, Amos Treiber
 from abc import ABC, abstractmethod
 from logging import getLogger
 from random import sample
-from typing import Collection, Set, List, Iterator, Tuple, Any, Dict
+from typing import Collection, Set, List, Iterator, Tuple, Any, Dict, Union
 
 import numpy as np
 
 from .constants import Selectivity
 from .dataset import Dataset, KeywordQueryLog
 from .range_database import RangeDatabase
+from .relational_database import RelationalQuery
 
 log = getLogger(__name__)
 
@@ -49,6 +50,7 @@ class QuerySpace(ABC, Collection):
 class KeywordQuerySpace(QuerySpace):
     __space: List[Set[Tuple[str, int]]]
     __allow_repetition: bool
+    __query_log: KeywordQueryLog
 
     def __init__(self, full: Dataset, known: Dataset, selectivity: Selectivity, size: int,
                  query_log: KeywordQueryLog = None,
@@ -72,7 +74,7 @@ class KeywordQuerySpace(QuerySpace):
             whether repetitions are allowed when drawing query sequences
         """
         self.__space: List[Set[Tuple[str, int]]] = []
-
+        self.__query_log = query_log
         for i, candidate_keywords in enumerate(self._candidates(full, known, query_log)):
             if len(candidate_keywords) < size:
                 log.warning(f"Set of candidate keywords with length {len(candidate_keywords)} at position {i} smaller "
@@ -82,13 +84,24 @@ class KeywordQuerySpace(QuerySpace):
             if selectivity == Selectivity.High:
                 self.__space.append(set(sorted(candidate_keywords, key=lambda item: full.selectivity(item[0]),
                                                reverse=True)[:size]))
+            if selectivity == Selectivity.HighExceptTopOneHundred:
+                self.__space.append(set(sorted(candidate_keywords, key=lambda item: full.selectivity(item[0]),
+                                               reverse=True)[100:][:size]))
             elif selectivity == Selectivity.Low:
                 self.__space.append(set(sorted(candidate_keywords, key=lambda item: full.selectivity(item[0]))[:size]))
             elif selectivity == Selectivity.PseudoLow:
                 self.__space.append(set(sorted(filter(lambda item: 10 <= full.selectivity(item[0]), candidate_keywords),
                                                key=lambda item: full.selectivity(item[0]))[:size]))
+            elif selectivity == Selectivity.PseudoLowTwo:
+                self.__space.append(set(sorted(filter(lambda item: 2 <= full.selectivity(item[0]), candidate_keywords),
+                                               key=lambda item: full.selectivity(item[0]))[:size]))
+            elif selectivity == Selectivity.PseudoLowFive:
+                self.__space.append(set(sorted(filter(lambda item: 5 <= full.selectivity(item[0]), candidate_keywords),
+                                               key=lambda item: full.selectivity(item[0]))[:size]))
             elif selectivity == Selectivity.Independent:
                 self.__space.append(set(sample(population=candidate_keywords, k=size)))
+            elif selectivity == Selectivity.IndependentNotOne:
+                self.__space.append(set(sample(population=list(filter(lambda item: full.selectivity(item[0]) >= 2, candidate_keywords)), k=size)))
 
         self.__allow_repetition = allow_repetition
 
@@ -123,7 +136,10 @@ class KeywordQuerySpace(QuerySpace):
     def _get_space(self) -> Iterator[Set[Tuple[str, int]]]:
         yield from self.__space
 
-    def select(self, n: int) -> Iterator[List[str]]:
+    def _get_log(self) -> KeywordQueryLog:
+        return self.__query_log
+
+    def select(self, n: int, *args, **kwargs) -> Iterator[List[str]]:
         """
         Selects a query sequence of the desired length.
 
@@ -150,9 +166,12 @@ class KeywordQuerySpace(QuerySpace):
                     f" {len(self.__space)}.")
                 length = len(space)
             space = list(space)
+            queries = list(map(lambda item: item[0], space))
             p = np.array(list(map(lambda item: float(item[1]), space)))
             p /= p.sum()
-            yield np.random.choice(list(map(lambda item: item[0], space)), length, p=p, replace=self.__allow_repetition)
+            """We can't sample directly for relational queries because np sees tuples as arrays"""
+            idx = np.random.choice(len(queries), length, p=p, replace=self.__allow_repetition)
+            yield [queries[i] for i in idx]
 
     def __len__(self) -> int:
         return len(self.__space)

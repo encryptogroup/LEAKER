@@ -6,7 +6,7 @@ Authors: Johannes Leupold
 """
 from nltk import download as nltk_download
 from nltk.corpus import stopwords
-from whoosh.analysis import StemmingAnalyzer, StandardAnalyzer, Analyzer
+from whoosh.analysis import StemmingAnalyzer, StandardAnalyzer, LanguageAnalyzer, FancyAnalyzer, Analyzer, RegexTokenizer
 from whoosh.fields import SchemaClass, ID, TEXT, NUMERIC, STORED
 
 nltk_download("stopwords")
@@ -26,4 +26,4 @@ class QueryLogIndexSchema(SchemaClass):
 
 
 def keyword_analyzer() -> Analyzer:
-    return StandardAnalyzer(stoplist=stopwords.words())
+    return FancyAnalyzer(expression=r"\s+[0-9]*",stoplist=stopwords.words(),splitnums=False,maxsize=10)
