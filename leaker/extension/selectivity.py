@@ -81,6 +81,7 @@ class SelectivityExtension(IdentityExtension):
 
     def sample(self, dataset: Union[Dataset, RelationalDatabase]) -> 'SelectivityExtension':
         if isinstance(dataset, RelationalDatabase):
-            return SelectivityExtension(dataset, dataset.doc_ids(), dataset.keywords(), self._identity_cache)
+            # return SelectivityExtension(dataset, dataset.doc_ids(), dataset.keywords(), self._identity_cache)
+            return SelectivityExtension(dataset)  # building a new extension is cheaper than sampling it
         else:
             return SelectivityExtension(dataset, dataset.doc_ids(), dataset.keywords(), self._identity_cache)
