@@ -338,6 +338,7 @@ class SQLRelationalDatabase(RelationalDatabase):
             if query in self.get_extension(SelectivityExtension).get_identity_cache().keys():
                 return self.get_extension(SelectivityExtension).selectivity(query)
 
+        self.open()
         if query.id is not None:
             ret, res = self._sql_connection.execute_query(f"SELECT selectivity FROM queries "
                                                           f"WHERE query_id = {query.id}", select=True)
