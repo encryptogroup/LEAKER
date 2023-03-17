@@ -24,7 +24,7 @@ f = logging.Formatter(fmt='{asctime} {levelname:8.8} {process} --- [{threadName:
 console = logging.StreamHandler(sys.stdout)
 console.setFormatter(f)
 
-file = logging.FileHandler('eval_relational_attacks', 'w', 'utf-8')
+file = logging.FileHandler('eval_relational_attacks.log', 'w', 'utf-8')
 file.setFormatter(f)
 
 logging.basicConfig(handlers=[console, file], level=logging.DEBUG)
@@ -34,12 +34,12 @@ log = logging.getLogger(__name__)
 backend = SQLBackend()
 log.info(f"has dbs {backend.data_sets()}")
 rel_db: Dataset = backend.load("mimiciv_provider")
-rel_db.extend_with(IdentityExtension)
+rel_db.extend_with(SelectivityExtension)
 
 log.info(
     f"Loaded {rel_db.name()} data. {len(rel_db)} documents with {len(rel_db.keywords())} words. {rel_db.has_extension(SelectivityExtension)}")
 
-attacks = [RelationalScoring]  # the attacks to evaluate
+attacks = [RelationalSap]  # the attacks to evaluate
 runs = 3  # Amount of evaluations
 
 # From this, we can construct a simple EvaluationCase:
