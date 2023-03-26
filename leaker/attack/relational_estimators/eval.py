@@ -31,24 +31,24 @@ log = logging.getLogger(__name__)
 # Import
 backend = SQLBackend()
 log.info(f"has dbs {backend.data_sets()}")
-mimic_db: RelationalDatabase = backend.load(dataset)
-#mimic_db: RelationalDatabase = backend.load(dataset).restrict_keyword_size(1000, Selectivity.Independent)
+rel_db: RelationalDatabase = backend.load(dataset)
+rel_db: RelationalDatabase = backend.load(dataset).restrict_keyword_size(10000, Selectivity.Independent)
 log.info(
-    f"Loaded {mimic_db.name()} data. {len(mimic_db)} documents with {len(mimic_db.keywords())} words. {mimic_db.has_extension(IdentityExtension)}")
+    f"Loaded {rel_db.name()} data. {len(rel_db)} documents with {len(rel_db.keywords())} words. {rel_db.has_extension(IdentityExtension)}")
 
 
 def evaluate_actual_rlen(keywords):
-    mimic_db.open()
+    rel_db.open()
     rlen_list = []
     for q in keywords:
-        rlen_list.append(sum(1 for _ in mimic_db(q)))
+        rlen_list.append(sum(1 for _ in rel_db(q)))
 
     median = statistics.median(rlen_list)
     point95 = statistics.quantiles(data=rlen_list, n=100)[94]
     point99 = statistics.quantiles(data=rlen_list, n=100)[98]
     maximum = max(rlen_list)
 
-    mimic_db.close()
+    rel_db.close()
     return median, point95, point99, maximum
 
 
@@ -82,22 +82,22 @@ def evaluate_estimator(estimator: RelationalEstimator, keywords: Union[List[Rela
     error_value_list = []
     error_value_list_zero_one_ignored = []
     if not use_cooc:
-        _full_identity = mimic_db.get_extension(IdentityExtension)
+        _full_identity = rel_db.get_extension(IdentityExtension)
         for q in keywords:
             est_value = estimator.estimate(q)
             actual_value = len(_full_identity.doc_ids(q))
             current_error = ErrorMetric(est_value, actual_value)
             error_value_list.append(current_error)
-            if ignore_zero_one and not (est_value == 0 and actual_value == 1):
+            if ignore_zero_one and not (est_value == 0 and actual_value == 1) and not (est_value == 1 and actual_value == 0):
                 error_value_list_zero_one_ignored.append(current_error)
     else:
-        _full_coocc = mimic_db.get_extension(CoOccurrenceExtension)
+        _full_coocc = rel_db.get_extension(CoOccurrenceExtension)
         for q1, q2 in keywords:
             est_value = estimator.estimate(q1, q2)
             actual_value = _full_coocc.co_occurrence(q1, q2)
             current_error = ErrorMetric(est_value, actual_value)
             error_value_list.append(current_error)
-            if ignore_zero_one and not (est_value == 0 and actual_value == 1):
+            if ignore_zero_one and not (est_value == 0 and actual_value == 1) and not (est_value == 1 and actual_value == 0):
                 error_value_list_zero_one_ignored.append(current_error)
 
     median = np.median(error_value_list)
@@ -123,12 +123,12 @@ def evaluate_estimator(estimator: RelationalEstimator, keywords: Union[List[Rela
 
 def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, sel=Selectivity.Independent, use_cooc=False, ignore_zero_one=False):
     """ selectivity only for rlen, not for cooc (uses independent query tuples with known co-occ != 0 """
-    if not mimic_db.has_extension(IdentityExtension):
-        mimic_db.extend_with(IdentityExtension)
+    if not rel_db.has_extension(IdentityExtension):
+        rel_db.extend_with(IdentityExtension)
 
     if use_cooc:
-        if not mimic_db.has_extension(CoOccurrenceExtension):
-            mimic_db.extend_with(CoOccurrenceExtension)
+        if not rel_db.has_extension(CoOccurrenceExtension):
+            rel_db.extend_with(CoOccurrenceExtension)
 
     results_list = []
     for i in range(0, nr_of_evals):
@@ -136,11 +136,11 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, sel=Selectivity.Independent,
         log.info('RUNNING ITERATION: ' + str(i+1))
         log.info('######################################')
         for known_data_rate in [i / 10 for i in range(2, 10, 2)]:
-            mimic_db.open()
-            sampled_db = mimic_db.sample(known_data_rate)
+            rel_db.open()
+            sampled_db = rel_db.sample(known_data_rate)
 
             if not use_cooc:
-                kw_sample = mimic_db.queries(max_queries=nr_of_queries, sel=sel)
+                kw_sample = rel_db.queries(max_queries=nr_of_queries, sel=sel)
             else:
                 # only use tuples of queries with a known cooc-selectivity != 0
                 # (idea: cooc of 0 sampling is best, therefore we focus on the other ones)
@@ -157,18 +157,18 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, sel=Selectivity.Independent,
                     log.info(f"Only {len(kw_sample)} suitable query tuples. No restriction of number of queries applied.")
 
             # SAMPLING
-            sampling_est = SamplingRelationalEstimator(sample=sampled_db, full=mimic_db)
+            sampling_est = SamplingRelationalEstimator(sample=sampled_db, full=rel_db)
             log.info('SAMPLING')
             results_list.append(
                ('SAMPLING-' + str(known_data_rate),) + evaluate_estimator(sampling_est, kw_sample, use_cooc, ignore_zero_one))
 
             # KDE Estimator
-            kde_est = KDERelationalEstimator(sample=sampled_db, full=mimic_db)
+            kde_est = KDERelationalEstimator(sample=sampled_db, full=rel_db)
             log.info('KDE')
             results_list.append(('KDE-' + str(known_data_rate),) + evaluate_estimator(kde_est, kw_sample, use_cooc, ignore_zero_one))
 
             # NARU Estimator
-            naru_est = NaruRelationalEstimator(sample=sampled_db, full=mimic_db)
+            naru_est = NaruRelationalEstimator(sample=sampled_db, full=rel_db)
             log.info('NARU')
             results_list.append(('NARU-' + str(known_data_rate),) + evaluate_estimator(naru_est, kw_sample, use_cooc, ignore_zero_one))
 
@@ -181,7 +181,7 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, sel=Selectivity.Independent,
     df = df.groupby(['method']).mean()
     df = df.sort_index()
     sns_plot = sns.heatmap(df, annot=True, cmap='RdYlGn_r', fmt=".1f")
-    plt.title('dataset=' + str(mimic_db.name()) + ', cooc=' + str(use_cooc) + ', nr_of_evals=' + str(
+    plt.title('dataset=' + str(rel_db.name()) + ', cooc=' + str(use_cooc) + ', nr_of_evals=' + str(
         nr_of_evals) + ', nr_of_queries=' + str(nr_of_queries) +
               ', ignore_zero_one=False')
     sns_plot.figure.savefig("estimators.png", bbox_inches='tight', dpi=1200)
@@ -191,12 +191,12 @@ def run_rlen_eval(nr_of_evals=1, nr_of_queries=100, sel=Selectivity.Independent,
         df_ignored = df_ignored.groupby(['method']).mean()
         df_ignored = df_ignored.sort_index()
         sns_plot_ignored = sns.heatmap(df_ignored, annot=True, cmap='RdYlGn_r', fmt=".1f")
-        plt.title('dataset=' + str(mimic_db.name()) + ', cooc=' + str(use_cooc) + ', nr_of_evals=' + str(
+        plt.title('dataset=' + str(rel_db.name()) + ', cooc=' + str(use_cooc) + ', nr_of_evals=' + str(
             nr_of_evals) + ', nr_of_queries=' + str(nr_of_queries) +
                   ', ignore_zero_one=' + str(ignore_zero_one))
         sns_plot_ignored.figure.savefig("estimators_zero_one.png", bbox_inches='tight', dpi=1200)
 
-    mimic_db.close()
+    rel_db.close()
 
 
 if __name__ == "__main__":
