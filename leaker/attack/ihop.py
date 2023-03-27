@@ -301,6 +301,7 @@ class Ihop(KeywordAttack):
 
 
     def recover(self, dataset: Dataset, queries: Iterable[str]) -> List[str]:
+        log.info(f"Running {self.name()}")
         ndocs = len(dataset)
         rid = ResponseIdentity()
         queries = list(queries)
@@ -362,6 +363,7 @@ class Ihop(KeywordAttack):
         pred = [self._chosen_keywords[kw_id] for kw_id in keyword_predictions_for_each_query]
         # accuracy = np.mean(np.array([1 if real == prediction else 0 for real, prediction in zip(queries, pred)]))
         # print("IHOP_accuracy =",accuracy)
+        log.info(f"Reconstruction completed.")
         return pred
 
 
