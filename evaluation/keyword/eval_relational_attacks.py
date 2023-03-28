@@ -40,13 +40,13 @@ rel_db: Dataset = backend.load("dmv_10k_11cols")
 log.info(
     f"Loaded {rel_db.name()} data. {len(rel_db)} documents with {len(rel_db.keywords())} words. {rel_db.has_extension(SelectivityExtension)}")
 
-attacks = [SubgraphID, RelationalSap, ScoringAttack, RefinedScoringAttack, Ihop]  # the attacks to evaluate
+attacks = [SubgraphID, Countv2, RelationalSap, ScoringAttack, RefinedScoringAttack, Ihop]  # the attacks to evaluate
 runs = 3  # Amount of evaluations
 
 # From this, we can construct a simple EvaluationCase:
 evaluation_case = EvaluationCase(attacks=attacks, dataset=rel_db, runs=runs)
 
-kdr = [0.01, .1, .2, .3, .4, .5, .75, 1]  # known data rates
+kdr = [0.01, .1, .2, .3, .4, .5, .6, .7, .8, .9, 1]  # known data rates
 reuse = True  # If we reuse sampled datasets a number of times (=> we will have a 5x5 evaluation here)
 # From this, we can construct a DatasetSampler:
 dataset_sampler = KnownDatasetSampler(kdr_samples=kdr, reuse=reuse)
