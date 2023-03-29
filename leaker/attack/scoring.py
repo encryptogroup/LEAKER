@@ -388,6 +388,46 @@ class NaruRelationalScoring(RelationalScoring):
         return NaruRelationalEstimator(known, full)
 
 
+class LowNaruRelationalScoring(NaruRelationalScoring):
+    """
+    Implements the Scoring attack from [DHP21]. Using naru co-occurrence estimates in the selectivity-range 0<x<=0.005.
+    If known_query_size == 0, they will be uncovered like in [CGPR15]
+    """
+
+    _est_sampling: SamplingRelationalEstimator
+
+    ''' Set estimation lower limit absolute (e.g. 1 to skip sampling in 0 case) and upper limit relative (e.g. 0.5% as 
+    in naru paper). Upper absolute limit will then be calculated based on the number of rows in the full dataset. '''
+    __estimation_lower_limit = 1
+    __estimation_upper_limit_relative = 0.005
+    __estimation_upper_limit: int
+
+    def __init__(self, known: SQLRelationalDatabase, known_query_size: float = 0.15):
+        self._est_sampling = SamplingRelationalEstimator(known, known.parent())
+        self.__estimation_upper_limit = round(len(known.parent().queries()) * self.__estimation_upper_limit_relative)
+        super(LowNaruRelationalScoring, self).__init__(known, known_query_size)
+
+    @classmethod
+    def name(cls) -> str:
+        return "LowNaruScoring"
+
+    def _build_cooc_s_kw_matrix(self, estimator: RelationalEstimator, k: int, known_queries, known_queries_pos):
+        coocc_s_kw = np.zeros((len(self._known_keywords), k))
+        for i in range(len(self._known_keywords)):
+            for j in range(k):
+                sampled_cooc = round(self._est_sampling.estimate(self._known_keywords[i],
+                                                                  known_queries[known_queries_pos[j]]))
+
+                if self.__estimation_lower_limit <= sampled_cooc <= self.__estimation_upper_limit:
+                    est_cooc = estimator.estimate(self._known_keywords[i], known_queries[known_queries_pos[j]])
+                    coocc_s_kw[i][j] = est_cooc
+                else:
+                    # use sampling
+                    coocc_s_kw[i][j] = sampled_cooc
+
+        return coocc_s_kw
+
+
 class PerfectRelationalScoring(RelationalScoring):
     """
     Implements the Scoring attack from [DHP21]. Using perfect co-occurrences.
