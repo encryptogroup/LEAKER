@@ -103,6 +103,101 @@ class ScoringAttack(Countv2):
         return uncovered
 
 
+class ScoringAttackFive(ScoringAttack):
+    """
+    Basic Scoring attack with a fixed nr of known queries of 10
+    """
+
+    def __init__(self, known: Dataset):
+        super(ScoringAttackFive, self).__init__(known)
+
+    def _get_known_queries(self, dataset: Dataset, queries: List[str]) -> Dict[int, str]:
+        known_query_ids = random.sample(range(len(queries)), 5)  # overwrite to fixed number
+        known_queries = {i: queries[i] for i in known_query_ids}
+
+        return known_queries
+
+    @classmethod
+    def name(cls) -> str:
+        return "ScoringFive"
+
+
+class ScoringAttackTen(ScoringAttack):
+    """
+    Basic Scoring attack with a fixed nr of known queries of 10
+    """
+
+    def __init__(self, known: Dataset):
+        super(ScoringAttackTen, self).__init__(known)
+
+    def _get_known_queries(self, dataset: Dataset, queries: List[str]) -> Dict[int, str]:
+        known_query_ids = random.sample(range(len(queries)), 10)  # overwrite to fixed number
+        known_queries = {i: queries[i] for i in known_query_ids}
+
+        return known_queries
+
+    @classmethod
+    def name(cls) -> str:
+        return "ScoringTen"
+
+
+class ScoringAttackFifteen(ScoringAttack):
+    """
+    Basic Scoring attack with a fixed nr of known queries of 10
+    """
+
+    def __init__(self, known: Dataset):
+        super(ScoringAttackFifteen, self).__init__(known)
+
+    def _get_known_queries(self, dataset: Dataset, queries: List[str]) -> Dict[int, str]:
+        known_query_ids = random.sample(range(len(queries)), 15)  # overwrite to fixed number
+        known_queries = {i: queries[i] for i in known_query_ids}
+
+        return known_queries
+
+    @classmethod
+    def name(cls) -> str:
+        return "ScoringFifteen"
+
+
+class ScoringAttackTwenty(ScoringAttack):
+    """
+    Basic Scoring attack with a fixed nr of known queries of 10
+    """
+
+    def __init__(self, known: Dataset):
+        super(ScoringAttackTwenty, self).__init__(known)
+
+    def _get_known_queries(self, dataset: Dataset, queries: List[str]) -> Dict[int, str]:
+        known_query_ids = random.sample(range(len(queries)), 20)  # overwrite to fixed number
+        known_queries = {i: queries[i] for i in known_query_ids}
+
+        return known_queries
+
+    @classmethod
+    def name(cls) -> str:
+        return "ScoringTwentyFive"
+
+
+class ScoringAttackFifty(ScoringAttack):
+    """
+    Basic Scoring attack with a fixed nr of known queries of 10
+    """
+
+    def __init__(self, known: Dataset):
+        super(ScoringAttackFifty, self).__init__(known)
+
+    def _get_known_queries(self, dataset: Dataset, queries: List[str]) -> Dict[int, str]:
+        known_query_ids = random.sample(range(len(queries)), 50)  # overwrite to fixed number
+        known_queries = {i: queries[i] for i in known_query_ids}
+
+        return known_queries
+
+    @classmethod
+    def name(cls) -> str:
+        return "ScoringFifty"
+
+
 class RelationalScoring(Countv2):
     """
     Basic Scoring attack that can be used with estimators
