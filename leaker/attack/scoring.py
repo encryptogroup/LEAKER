@@ -796,7 +796,7 @@ class RelationalRefinedScoring(RefinedScoringAttack):
         return uncovered
 
 
-class NaruRelationalRefinedScoring(RelationalScoring):
+class NaruRelationalRefinedScoring(RelationalRefinedScoring):
     """
     Refined Scoring with Naru
     """
