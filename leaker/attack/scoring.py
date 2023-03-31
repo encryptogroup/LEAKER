@@ -586,6 +586,7 @@ class RefinedScoringAttack(ScoringAttack):
     """
     Implements the refined Scoring attack from [DHP21]. If known_query_size == 0, they will be uncovered like in
     [CGPR15]
+    ATTENTION: IMPLEMENTATION ERROR (missing normalization)
     """
     _ref_speed: int
 
@@ -793,6 +794,22 @@ class RelationalRefinedScoring(RefinedScoringAttack):
         log.info(f"Reconstruction completed.")
 
         return uncovered
+
+
+class NaruRelationalRefinedScoring(RelationalScoring):
+    """
+    Refined Scoring with Naru
+    """
+
+    def __init__(self, known: SQLRelationalDatabase, known_query_size: float = 0.15, ref_speed: int = 10):
+        super(NaruRelationalRefinedScoring, self).__init__(known, known_query_size, ref_speed)
+
+    @classmethod
+    def name(cls) -> str:
+        return "NaruRelationalRefinedScoring"
+
+    def _get_estimator(self, known, full):
+        return NaruRelationalEstimator(known, full)
 
 
 class PerfectRelationalRefinedScoring(RelationalRefinedScoring):
