@@ -53,7 +53,7 @@ class IdentityExtension(Extension, ABC):
                 _doc_ids: Set[Identifier] = set() if doc_ids is None else doc_ids
                 _keywords: Set[Keyword] = set() if keywords is None else keywords
 
-                if original_cache is not None:
+                if original_cache is not None and not isinstance(dataset, RelationalDatabase):
                     log.debug(f"Subsampling {self.extension_name} for '{dataset.name()}'")
                     new_identity_cache: Dict[Keyword, Set[Identifier]] = dict()
                     for keyword, original_doc_ids in filter(lambda item: item[0] in _keywords, original_cache.items()):
