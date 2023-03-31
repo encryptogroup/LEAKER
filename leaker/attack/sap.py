@@ -278,7 +278,7 @@ class RelationalSap(KeywordAttack):
 
     @classmethod
     def name(cls) -> str:
-        return "Relational-SAP"
+        return "RelationalSAP"
 
     @classmethod
     def required_leakage(cls) -> List[LeakagePattern[Any]]:
@@ -326,7 +326,7 @@ class ErrorSimulationRelationalSap(RelationalSap):
 
     @classmethod
     def name(cls) -> str:
-        return "Error-Simulation-Relational-SAP"
+        return "ErrorSimulationRelationalSAP"
 
     def _perform_estimation(self, estimator: RelationalEstimator, known: SQLRelationalDatabase, n: int):
         i = 0
@@ -366,7 +366,7 @@ class PerfectRelationalSap(RelationalSap):
 
     @classmethod
     def name(cls) -> str:
-        return "Perfect-Relational-SAP"
+        return "PerfectRelationalSAP"
 
 
 class NaruRelationalSap(RelationalSap):
