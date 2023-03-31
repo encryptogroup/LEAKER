@@ -387,4 +387,4 @@ class NaruRelationalSap(RelationalSap):
 
     @classmethod
     def name(cls) -> str:
-        return "Naru-SAP"
+        return "NaruRelationalSAP"
