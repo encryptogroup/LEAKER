@@ -40,7 +40,7 @@ rel_db: Dataset = backend.load("dmv_10k_11cols")
 log.info(
     f"Loaded {rel_db.name()} data. {len(rel_db)} documents with {len(rel_db.keywords())} words. {rel_db.has_extension(SelectivityExtension)}")
 
-attacks = [Ikkoptimized, SubgraphID, Countv2, RelationalSap, ScoringAttack, RefinedScoringAttack, Ihop]  # the attacks to evaluate
+attacks = [Ikkoptimized, SubgraphID, Countv2, RelationalSap, RelationalScoring, RelationalRefinedScoring, Ihop]  # the attacks to evaluate
 runs = 3  # Amount of evaluations
 
 # From this, we can construct a simple EvaluationCase:
