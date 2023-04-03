@@ -812,6 +812,38 @@ class NaruRelationalRefinedScoring(RelationalRefinedScoring):
         return NaruRelationalEstimator(known, full)
 
 
+class LowNaruRelationalRefinedScoring(NaruRelationalRefinedScoring):
+    """
+    Implements the Refined Scoring attack from [DHP21]. Using naru co-occurrence estimates in the selectivity-range 0<x<=0.005.
+    If known_query_size == 0, they will be uncovered like in [CGPR15]
+    """
+
+    _est_sampling: SamplingRelationalEstimator
+
+    ''' Set estimation lower limit absolute (e.g. 1 to skip sampling in 0 case) and upper limit relative (e.g. 0.5% as 
+    in naru paper). Upper absolute limit will then be calculated based on the number of rows in the full dataset. '''
+    __estimation_lower_limit = 1
+    __estimation_upper_limit_relative = 0.005
+    __estimation_upper_limit: int
+
+    def __init__(self, known: SQLRelationalDatabase, known_query_size: float = 0.15):
+        self._est_sampling = SamplingRelationalEstimator(known, known.parent())
+        self.__estimation_upper_limit = round(len(known.parent().queries()) * self.__estimation_upper_limit_relative)
+        super(LowNaruRelationalRefinedScoring, self).__init__(known, known_query_size)
+
+    @classmethod
+    def name(cls) -> str:
+        return "LowNaruRefinedScoring"
+
+    def _estimate_coocc(self, estimator: RelationalEstimator, q1: RelationalQuery, q2: RelationalQuery):
+        sampled_cooc = round(self._est_sampling.estimate(q1, q2))
+
+        if self.__estimation_lower_limit <= sampled_cooc <= self.__estimation_upper_limit:
+            return round(estimator.estimate(q1, q2))
+        else:
+            return sampled_cooc
+
+
 class PerfectRelationalRefinedScoring(RelationalRefinedScoring):
     """
     Implements the refined Scoring attack from [DHP21]. Using perfect co-occurrence estimates.
