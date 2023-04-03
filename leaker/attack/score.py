@@ -36,7 +36,7 @@ class Score(KeywordAttack):
         log.info(f"Setting up Score attack for {known.name()} with {known_query_size} known queries. This might take some time.")
         super(Score, self).__init__(known)
         self._known_data_subset = known
-        self._known_qu1ery_size = known_query_size
+        self._known_query_size = known_query_size
         self._known_keywords = known.keywords()
         
         if not known.has_extension(CoOccurrenceExtension):
