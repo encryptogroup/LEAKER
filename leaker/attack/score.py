@@ -32,11 +32,11 @@ class Score(KeywordAttack):
     _known_data_subset: Dataset
     _full_dataset_size: int
 
-    def __init__(self, known: Dataset, known_query_size: int = 10):
+    def __init__(self, known: Dataset, known_query_size: int = 23):  # 23 corresponds to 15% of 150 queries
         log.info(f"Setting up Score attack for {known.name()} with {known_query_size} known queries. This might take some time.")
         super(Score, self).__init__(known)
         self._known_data_subset = known
-        self._known_query_size = known_query_size
+        self._known_qu1ery_size = known_query_size
         self._known_keywords = known.keywords()
         
         if not known.has_extension(CoOccurrenceExtension):
@@ -132,7 +132,7 @@ class RefinedScore(KeywordAttack):
     _known_data_subset: Dataset
     _full_dataset_size: int
 
-    def __init__(self, known: Dataset, known_query_size: int = 10, refSpeed:int = 10):
+    def __init__(self, known: Dataset, known_query_size: int = 23, refSpeed:int = 10):  # 23 corresponds to 15% of 150 queries
         
         log.info(f"Setting up RefinedScore attack for {known.name()} with known_query_size={known_query_size} and refSpeed={refSpeed}. This might take some time.")
         super(RefinedScore, self).__init__(known)
