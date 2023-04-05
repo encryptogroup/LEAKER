@@ -192,7 +192,10 @@ class RelationalScoring(Countv2):
         for i, _ in enumerate(queries):
             if i not in known_queries:
                 scores = coocc_s_kw - coocc_s_td[i].T
-                scores = -np.log(np.linalg.norm(scores, axis=1))
+                #scores = -np.log(np.linalg.norm(scores, axis=1))
+                scores_norm = np.linalg.norm(scores, axis=1)
+                scores_norm[scores_norm == 0] = min(scores_norm[scores_norm > 0]) / 100  # To avoid numerical errors
+                scores = -np.log(scores_norm)
                 known_queries[i] = self._known_keywords[np.argmax(scores)]
 
         uncovered = []
@@ -743,7 +746,10 @@ class RelationalRefinedScoring(RefinedScoringAttack):
             """%2 in Algo"""
             for i in unknown_queries:
                 scores = coocc_s_kw - coocc_s_td[i].T
-                scores = -np.log(np.linalg.norm(scores, axis=1))
+                # scores = -np.log(np.linalg.norm(scores, axis=1))
+                scores_norm = np.linalg.norm(scores, axis=1)
+                scores_norm[scores_norm == 0] = min(scores_norm[scores_norm > 0]) / 100  # To avoid numerical errors
+                scores = -np.log(scores_norm)
                 max_indices = np.argpartition(scores, -2)[-2:]  # top 2 argmax but result is unsorted
                 cand_0 = max_indices[0] if scores[max_indices[0]] > scores[max_indices[1]] else max_indices[1]
                 certainty = max(scores[max_indices[0]], scores[max_indices[1]]) \
