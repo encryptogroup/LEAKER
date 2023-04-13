@@ -8,14 +8,12 @@ import logging
 import sys
 
 from leaker.api import Dataset, Selectivity
-from leaker.attack import PartialQuerySpace, Ihop, Score, RefinedScore, Countv2, Ikk, SubgraphID, Ikkoptimized
-from leaker.attack.ihop import PerfectRelationalIhop, RelationalIhop
-from leaker.attack.sap import RelationalSap, PerfectRelationalSap
-from leaker.attack.scoring import RelationalScoring, RelationalRefinedScoring, ScoringAttackTen, \
-    RefinedScoringAttack, ScoringAttack
+from leaker.attack import PartialQuerySpace, Ihop, Countv2, Ikk, SubgraphID, Ikkoptimized
+from leaker.attack.sap import RelationalSap
+from leaker.attack.scoring import RelationalScoring, RelationalRefinedScoring
 from leaker.evaluation import EvaluationCase, QuerySelector, KnownDatasetSampler
-from leaker.evaluation.evaluator import KeywordAttackEvaluator, RelationalAttackEvaluator
-from leaker.extension import SelectivityExtension, IdentityExtension
+from leaker.evaluation.evaluator import RelationalAttackEvaluator
+from leaker.extension import SelectivityExtension
 from leaker.plotting import KeywordMatPlotLibSink
 from leaker.sql_interface import SQLBackend
 
@@ -35,18 +33,17 @@ log = logging.getLogger(__name__)
 backend = SQLBackend()
 log.info(f"has dbs {backend.data_sets()}")
 rel_db: Dataset = backend.load("dmv_10k_11cols")
-#rel_db.extend_with(SelectivityExtension)
 
 log.info(
     f"Loaded {rel_db.name()} data. {len(rel_db)} documents with {len(rel_db.keywords())} words. {rel_db.has_extension(SelectivityExtension)}")
 
-attacks = [Ikkoptimized, SubgraphID, Countv2, RelationalSap, RelationalScoring, RelationalRefinedScoring, Ihop]  # the attacks to evaluate
+attacks = [SubgraphID, Countv2, RelationalSap, RelationalScoring, RelationalRefinedScoring, Ihop]  # the attacks to evaluate
 runs = 3  # Amount of evaluations
 
 # From this, we can construct a simple EvaluationCase:
 evaluation_case = EvaluationCase(attacks=attacks, dataset=rel_db, runs=runs)
 
-kdr = [0.01, .1, .2, .3, .4, .5, .6, .7, .8, .9, 1]  # known data rates
+kdr = [0.01, 0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 1]  # known data rates
 reuse = True  # If we reuse sampled datasets a number of times (=> we will have a 5x5 evaluation here)
 # From this, we can construct a DatasetSampler:
 dataset_sampler = KnownDatasetSampler(kdr_samples=kdr, reuse=reuse)
@@ -61,7 +58,7 @@ allow_repetition = False  # If queries can repeat
 query_selector = QuerySelector(query_space=query_space, selectivity=sel, query_space_size=qsp_size, queries=sample_size,
                                allow_repetition=allow_repetition)
 
-out_file = "dmv_10k_11cols_1x1_High.png"  # Output file (if desired), will be stored in data/figures
+out_file = "dmv_10k_11cols_3x3_High.png"  # Output file (if desired), will be stored in data/figures
 
 # With these parameters, we can set up the Evaluator:
 eva = RelationalAttackEvaluator(evaluation_case=evaluation_case, dataset_sampler=dataset_sampler,
