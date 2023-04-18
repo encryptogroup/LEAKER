@@ -154,7 +154,6 @@ class RelationalScoring(Countv2):
         if self._known_query_size == 0:
             uncovered = super(RelationalScoring, self).recover(dataset, queries)
             known_queries = {i: kw for i, kw in enumerate(uncovered) if kw != ""}
-            print(known_queries)
         else:
             known_query_ids = random.sample(range(len(queries)), int(self._known_query_size * len(list(queries))))
             known_queries = {i: queries[i] for i in known_query_ids}
