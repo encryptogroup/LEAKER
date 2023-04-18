@@ -154,6 +154,7 @@ class RelationalScoring(Countv2):
         if self._known_query_size == 0:
             uncovered = super(RelationalScoring, self).recover(dataset, queries)
             known_queries = {i: kw for i, kw in enumerate(uncovered) if kw != ""}
+            print(known_queries)
         else:
             known_query_ids = random.sample(range(len(queries)), int(self._known_query_size * len(list(queries))))
             known_queries = {i: queries[i] for i in known_query_ids}
@@ -194,7 +195,8 @@ class RelationalScoring(Countv2):
                 scores = coocc_s_kw - coocc_s_td[i].T
                 #scores = -np.log(np.linalg.norm(scores, axis=1))
                 scores_norm = np.linalg.norm(scores, axis=1)
-                scores_norm[scores_norm == 0] = min(scores_norm[scores_norm > 0]) / 100  # To avoid numerical errors
+                if len(scores_norm[scores_norm > 0]) != 0:
+                    scores_norm[scores_norm == 0] = min(scores_norm[scores_norm > 0]) / 100  # To avoid numerical errors
                 scores = -np.log(scores_norm)
                 known_queries[i] = self._known_keywords[np.argmax(scores)]
 
@@ -208,6 +210,20 @@ class RelationalScoring(Countv2):
         log.info(f"Reconstruction completed.")
 
         return uncovered
+
+
+class RelationalScoringWithCount(RelationalScoring):
+    """
+    Relational Scoring attack that uses the countv2 attack to obtain the initially uncovered queries
+    """
+
+    def __init__(self, known: Dataset):
+        super(RelationalScoringWithCount, self).__init__(known)
+        self._known_query_size = 0
+
+    @classmethod
+    def name(cls) -> str:
+        return "RelationalScoringWithCount"
 
 
 class RelationalScoringFive(RelationalScoring):
@@ -800,6 +816,20 @@ class RelationalRefinedScoring(RefinedScoringAttack):
         log.info(f"Reconstruction completed.")
 
         return uncovered
+
+
+class RelationalRefinedScoringWithCount(RelationalRefinedScoring):
+    """
+    Refined Relational Scoring attack that uses the countv2 attack to obtain the initially uncovered queries
+    """
+
+    def __init__(self, known: Dataset):
+        super(RelationalRefinedScoringWithCount, self).__init__(known)
+        self._known_query_size = 0
+
+    @classmethod
+    def name(cls) -> str:
+        return "RelationalRefinedScoringWithCount"
 
 
 class NaruRelationalRefinedScoring(RelationalRefinedScoring):
