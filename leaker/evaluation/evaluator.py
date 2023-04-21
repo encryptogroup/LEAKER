@@ -10,6 +10,8 @@ from logging import getLogger
 from multiprocessing.pool import ThreadPool, Pool
 from typing import List, Union, Iterable, Tuple, Iterator, Optional, Type
 
+import pandas as pd
+
 from .errors import Error
 from .param import EvaluationCase, KnownDatasetSampler, QuerySelector, SampledDatasetSampler
 from ..api import Attack, RangeAttack, KeywordAttack, Dataset, DataSink, RangeQuerySpace, RangeDatabase
@@ -74,7 +76,29 @@ class KeywordAttackEvaluator(Evaluator):
         # recover queries using the given attack
         recovered = attack(dataset, queries)
         # count matches
-        correct = [actual == recovered for actual, recovered in zip(queries, recovered)].count(True)
+        matches = [actual == recovered for actual, recovered in zip(queries, recovered)]
+        correct = matches.count(True)
+
+        import itertools
+        uncovered_queries = list(itertools.compress(recovered, matches))
+        attributes = set([a.attr for a in dataset.keywords()])
+        for attr in attributes:
+            nr_total = 0
+            nr_uncovered = 0
+            for q in queries:
+                if q.attr == attr:
+                    nr_total = nr_total + 1
+            for q in uncovered_queries:
+                if q.attr == attr:
+                    nr_uncovered = nr_uncovered + 1
+            if nr_uncovered != 0:
+                uncovered_percent = nr_uncovered / nr_total
+            else:
+                uncovered_percent = 0
+
+            # write to csv
+            attr_details = pd.DataFrame([[attack.name(), str(kdr), str(attr), str(nr_uncovered), str(nr_total), str(uncovered_percent)]])
+            attr_details.to_csv('eval_attr_details.csv', mode='a', index=False, header=False)
 
         return attack.name(), user, kdr, correct / len(queries)
 
@@ -102,6 +126,11 @@ class KeywordAttackEvaluator(Evaluator):
 
         log.info(f"Running {self._evaluation_case.runs()} evaluation runs with parallelism {self._parallelism}")
         log.info("Evaluated Attacks:")
+
+        # delete output file for attr details
+        import os
+        if os.path.exists("eval_attr_details.csv"):
+            os.remove("eval_attr_details.csv")
 
         # log and register all evaluated attacks with all sinks
         for attack in self._evaluation_case.attacks():
@@ -146,6 +175,12 @@ class KeywordAttackEvaluator(Evaluator):
                         sink.offer_data(series, user, kdr, result)
 
             log.info(f"RUN {run} COMPLETED IN {stopwatch.lap()}")
+
+        # read attr info csv, perform aggregate, then write
+        df = pd.read_csv('eval_attr_details.csv')
+        df.columns = ['attack_name', 'kdr', 'attr_id', 'nr_uncovered', 'nr_total', 'uncovered_percent']
+        df = df.groupby(['attack_name', 'kdr', 'attr_id'], as_index=False).mean()
+        df.to_csv('eval_attr_details.csv', index=False, header=True)
 
         log.info("######################################################################################")
         log.info(f"Evaluation completed in {stopwatch.stop()}")
