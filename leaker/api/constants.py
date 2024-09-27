@@ -30,7 +30,7 @@ MYSQL_IDENTIFIER = "leaker"  # used to identify MySQL databases used for leaker
 
 MYSQL_USER_NAME = "leaker-user"
 
-MYSQL_USER_PASSWORD = "abcdefg"   # TODO: Use environment variables
+MYSQL_USER_PASSWORD = "abcdefg"
 
 
 class AbortException(Exception):
